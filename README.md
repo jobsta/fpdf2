@@ -27,26 +27,27 @@ pdf.cell(txt="hello world")
 pdf.output("hello_world.pdf")
 ```
 
-It is a fork and the successor of `PyFPDF` (_cf._ [history](https://pyfpdf.github.io/fpdf2/Development.html#history)).
+This is a fork of [fpdf2](https://github.com/PyFPDF/fpdf2) which contains some changes needed for integration
+in [reportbro-lib](https://github.com/jobsta/reportbro-lib), a reporting framework to generate pdf and xlsx
+reports based on report templates. The report template is created visually with a Javascript plugin.
+Changes include a setting for `encode_error_handling`, image alignment options and an optimized method
+to split text into lines.
+
+`fpdf2` itself is a fork and the successor of `PyFPDF` (_cf._ [history](https://pyfpdf.github.io/fpdf2/Development.html#history)).
 Compared with other PDF libraries, `fpdf2` is **fast, versatile, easy to learn and to extend** ([example](https://github.com/digidigital/Extensions-and-Scripts-for-pyFPDF-fpdf2)).
-It is also entirely writen in Python and has very few dependencies:
+It is also entirely written in Python and has very few dependencies:
 [Pillow](https://pillow.readthedocs.io/en/stable/), [defusedxml](https://pypi.org/project/defusedxml/) & [svg.path](https://pypi.org/project/svg.path/).
-
-**Development status**: this project is **mature** and **actively maintained**.
-
-We are looking for contributing developers: if you want to get involved but don't know how,
-or would like to volunteer helping maintain this lib, [open a discussion](https://github.com/PyFPDF/fpdf2/discussions)!
 
 Installation Instructions
 -------------------------
 ```bash
-pip install fpdf2
+pip install reportbro-fpdf2
 ```
 
 To get the latest, unreleased, development version straight from the development branch of this repository:
 
 ```bash
-pip install git+https://github.com/PyFPDF/fpdf2.git@master
+pip install git+https://github.com/jobsta/fpdf2.git@master
 ```
 
 Features

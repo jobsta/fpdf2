@@ -12,14 +12,15 @@ if __name__ == "__main__":
         Path("fpdf/fpdf.py").read_text(encoding="utf-8"),
     )[0]
     setup(
-        name="fpdf2",
-        version=version,
+        name="reportbro-fpdf2",
+        version="0.9.1",  # use our own version for reportbro-fpdf2 to avoid confusion new version of fpdf2
         description="Simple & fast PDF generation for Python",
         long_description=Path("README.md").read_text(encoding="utf-8"),
         long_description_content_type="text/markdown",
         author="Olivier PLATHEY ported by Max",
-        maintainer="Lucas Cimon",
-        url="https://pyfpdf.github.io/fpdf2/",
+        maintainer="Alex Hartmann",
+        maintainer_email="alex@reportbro.com",
+        url='https://www.reportbro.com',
         download_url=f"https://github.com/PyFPDF/fpdf2/tarball/{version}",
         project_urls={
             "Documentation": "https://pyfpdf.github.io/fpdf2/",
@@ -43,6 +44,7 @@ if __name__ == "__main__":
             "Programming Language :: Python :: 3.7",
             "Programming Language :: Python :: 3.8",
             "Programming Language :: Python :: 3.9",
+            "Programming Language :: Python :: 3.10",
             "Operating System :: OS Independent",
             "Topic :: Printing",
             "Topic :: Software Development :: Libraries :: Python Modules",

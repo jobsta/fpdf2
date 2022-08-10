@@ -341,7 +341,7 @@ class FPDF(GraphicsStateMixin):
                 This is a very common unit in typography; font sizes are expressed in this unit.
                 If given a number, then it will be treated as the number of points per unit.  (eg. 72 = 1 in)
                 Default to "mm".
-            format (str): possible values are "a3", "a4", "a5", "letter", "legal" or a tuple
+            format (str or Tuple[int, int]): possible values are "a3", "a4", "a5", "letter", "legal" or a tuple
                 (width, height) expressed in the given unit. Default to "a4".
             font_cache_dir (Path or str): [**DEPRECATED since v2.5.1**] unused
         """
@@ -416,6 +416,7 @@ class FPDF(GraphicsStateMixin):
         }
         self.core_fonts_encoding = "latin-1"
         "Font encoding, Latin-1 by default"
+        self.encode_error_handling = "strict"
         # Replace these fonts with these core fonts
         self.font_aliases = {
             "arial": "helvetica",
@@ -3204,6 +3205,104 @@ class FPDF(GraphicsStateMixin):
 
         return page_break_triggered
 
+    def split_text(self, first_w, w, txt) -> Tuple[str, int, bool]:
+        """
+        Optimized version of `multi_cell` with `split_only=True` to split a text into lines.
+        :param first_w: width of first line
+        :param w: line width except first one (set with first_w)
+        :param txt: text to split
+        :return: Array of tuples with (str, int, bool) where each tuple represents a text line, text width
+        and a flag if there is a forced new line at the end.
+        """
+        rv = []
+        cw = self.current_font['cw']
+        w_max = (w - 2*self.c_margin) * 1000.0 / self.font_size
+        if first_w != w:
+            current_w_max = (first_w - 2*self.c_margin) * 1000.0 / self.font_size
+            append_to_line = True  # first text line will be appended to existing line
+        else:
+            current_w_max = w_max
+            append_to_line = False
+        size_factor = self.font_size / 1000.0
+        s = txt.replace("\r", '')
+        char_count = len(s)
+        sep = -1
+        i = 0
+        j = 0
+        line_width = 0  # current line width
+        line_width_after_sep = 0  # current line width after last separator character
+        space_count = 0  # number of spaces in current line
+        while i < char_count:
+            # Get next character
+            c = s[i]
+            if c == '\n':
+                rv.append((substr(s, j, i-j), line_width * size_factor, True))
+                i += 1
+                sep = -1
+                j = i
+                line_width = 0
+                line_width_after_sep = 0
+                space_count = 0
+                if first_w != w:
+                    current_w_max = w_max
+                    append_to_line = False
+                continue
+            if c == ' ':
+                sep = i
+                line_width_after_sep = 0
+                space_count += 1
+
+            if self.unifontsubset:
+                char = ord(c)
+                if len(cw) > char:
+                    char_w = cw[char]
+                elif self.current_font['desc']['MissingWidth']:
+                    char_w = self.current_font['desc']['MissingWidth']
+                else:
+                    char_w = 500
+            else:
+                if ord(c) < 128:
+                    char_w = cw.get(c, 0)
+                else:
+                    char_w = 0
+                    encoded_chars = c.encode(self.core_fonts_encoding, self.encode_error_handling)
+                    for byte_val in encoded_chars:
+                        char_w += cw.get(chr(byte_val), 0)
+            line_width_after_char = line_width + char_w
+            if line_width_after_char > current_w_max:
+                # Automatic line break
+                if sep == -1:
+                    if append_to_line:
+                        # appending text (without any whitespaces so far) to existing line
+                        # does not fit -> try again with new line
+                        rv.append(('', 0, False))
+                        i = 0
+                    else:
+                        if i == j:
+                            i += 1
+                        # text is too long but there was no separator -> add all chars which fit into line
+                        rv.append((substr(s, j, i-j), line_width * size_factor, False))
+                else:
+                    # add text until last separator
+                    rv.append((substr(s, j, sep-j), (line_width - line_width_after_sep) * size_factor, False))
+                    i = sep + 1
+                sep = -1
+                j = i
+                line_width = 0
+                line_width_after_sep = 0
+                space_count = 0
+                if first_w != w:
+                    current_w_max = w_max
+                    append_to_line = False
+            else:
+                line_width = line_width_after_char
+                line_width_after_sep += char_w
+                i += 1
+        # Last chunk
+        if i > j:
+            rv.append((substr(s, j, i-j), line_width * size_factor, False))
+        return rv
+
     @check_page
     def write(
         self, h: float = None, txt: str = "", link: str = "", print_sh: bool = False
@@ -3301,6 +3400,8 @@ class FPDF(GraphicsStateMixin):
         link="",
         title=None,
         alt_text=None,
+        halign=None,
+        valign=None,
     ):
         """
         Put an image on the page.
@@ -3335,6 +3436,12 @@ class FPDF(GraphicsStateMixin):
             title (str): optional. Currently, never seem rendered by PDF readers.
             alt_text (str): optional alternative text describing the image,
                 for accessibility purposes. Displayed by some PDF readers on hover.
+            halign (str): possible values are 'L' for left, 'C' for center and 'R' for right horizontal alignment,
+            if specified the image will be aligned horizontally inside the given width and by keeping
+            the aspect ratio of the image.
+            valign (str): possible values are 'T' for top, 'M' for middle and 'B' for bottom vertical alignment,
+            if specified the image will be aligned vertically inside the given width and by keeping
+            the aspect ratio of the image.
         """
         if type:
             warnings.warn(
@@ -3386,6 +3493,31 @@ class FPDF(GraphicsStateMixin):
 
         if self.oversized_images and info["usages"] == 1:
             info = self._downscale_image(name, img, info, w, h)
+
+        if halign or valign:
+            # horizontal and vertical alignment of image within given width and height
+            # by keeping original image aspect ratio
+            image_width, image_height = info['w'], info['h']
+            if image_width <= w and image_height <= h:
+                image_display_width, image_display_height = image_width, image_height
+            else:
+                size_ratio = image_width / image_height
+                tmp = w / size_ratio
+                if tmp <= h:
+                    image_display_width = w
+                    image_display_height = tmp
+                else:
+                    image_display_width = h * size_ratio
+                    image_display_height = h
+            if halign == 'C':  # center
+                x += (w - image_display_width) / 2
+            elif halign == 'R':  # right
+                x += w - image_display_width
+            if valign in ('C', 'M'):  # center / middle
+                y += (h - image_display_height) / 2
+            elif valign == 'B':  # bottom
+                y += h - image_display_height
+            w, h = image_display_width, image_display_height
 
         # Flowing mode
         if y is None:
@@ -3663,7 +3795,7 @@ class FPDF(GraphicsStateMixin):
         # - for built-in fonts: string instances (encoding: latin-1, cp1252)
         if not self.unifontsubset and self.core_fonts_encoding:
             try:
-                return txt.encode(self.core_fonts_encoding).decode("latin-1")
+                return txt.encode(self.core_fonts_encoding, self.encode_error_handling).decode("latin-1")
             except UnicodeEncodeError as error:
                 raise FPDFUnicodeEncodingException(
                     text_index=error.start,
