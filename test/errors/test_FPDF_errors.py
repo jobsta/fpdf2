@@ -73,14 +73,15 @@ def test_units():
 
 def test_doc_option_only_core_fonts_encoding():
     pdf = fpdf.FPDF()
-    pdf.set_doc_option("core_fonts_encoding", 4)
-    assert pdf.core_fonts_encoding == 4
+    with pytest.warns(DeprecationWarning):
+        pdf.set_doc_option("core_fonts_encoding", 4)
+        assert pdf.core_fonts_encoding == 4
 
-    with pytest.raises(FPDFException) as e:
-        pdf.set_doc_option("not core_fonts_encoding", None)
+        with pytest.raises(FPDFException) as e:
+            pdf.set_doc_option("not core_fonts_encoding", None)
 
-    msg = 'Unknown document option "not core_fonts_encoding"'
-    assert str(e.value) == msg
+        msg = 'Unknown document option "not core_fonts_encoding"'
+        assert str(e.value) == msg
 
 
 def test_adding_content_after_closing():
@@ -99,7 +100,7 @@ def test_adding_content_after_closing():
         pdf.cell(w=pdf.epw, txt="Hello again!", align="C")
     assert (
         str(error.value)
-        == "Content cannot be added on a closed document, after calling output()"
+        == "Content cannot be added on a finalized document, after calling output()"
     )
 
 
@@ -112,7 +113,11 @@ def test_repeated_calls_to_output(tmp_path):
 def test_unsupported_image_filter_error():
     image_filter = "N/A"
     with pytest.raises(FPDFException) as error:
-        get_img_info(img=Image.open(HERE / "flowers.png"), image_filter=image_filter)
+        get_img_info(
+            HERE / "flowers.png",
+            Image.open(HERE / "flowers.png"),
+            image_filter=image_filter,
+        )
     assert str(error.value) == f'Unsupported image filter: "{image_filter}"'
 
 
@@ -121,4 +126,28 @@ def test_incorrent_number_of_pages_toc():
     pdf.add_page()
     pdf.insert_toc_placeholder(lambda a, b: None, 10)
     with pytest.raises(FPDFException):
-        pdf.close()
+        pdf.output()
+
+
+def test_invalid_page_background():
+    pdf = fpdf.FPDF()
+    i = 0
+    with pytest.raises(TypeError) as error:
+        pdf.set_page_background(i)
+
+    msg = f"""background must be of type str, io.BytesIO, PIL.Image.Image, drawing.DeviceRGB, tuple or None
+        got: {type(i)}"""
+    assert str(error.value) == msg
+
+
+def test_intantiating_fpdf_module():  # issue 683
+    # pylint: disable=import-outside-toplevel,not-callable,redefined-outer-name
+    from fpdf import fpdf
+
+    with pytest.raises(TypeError) as error:
+        fpdf()
+    assert str(error.value) == (
+        "You tried to instantied the fpdf module."
+        " You probably want to import the FPDF class instead:"
+        " from fpdf import FPDF"
+    )

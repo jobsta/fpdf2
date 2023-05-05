@@ -3,8 +3,6 @@ from pathlib import Path
 import pytest
 
 from fpdf import FPDF, TitleStyle, errors
-from fpdf.outline import build_outline, outline_as_str
-from fpdf.syntax import iobj_ref as pdf_ref
 
 from test.conftest import assert_pdf_equal
 
@@ -76,6 +74,7 @@ def test_simple_outline(tmp_path):
 
 
 def p(pdf, text, **kwargs):
+    "Inserts a paragraph"
     pdf.multi_cell(
         w=pdf.epw,
         h=pdf.font_size,
@@ -96,18 +95,10 @@ def render_toc(pdf, outline):
     pdf.y += 20
     pdf.set_font("Courier", size=12)
     for section in outline:
-        link = pdf.add_link()
-        pdf.set_link(link, page=section.page_number)
-        text = f'{" " * section.level * 2} {section.name}'
-        text += (
-            f' {"." * (60 - section.level*2 - len(section.name))} {section.page_number}'
-        )
-        pdf.multi_cell(
-            w=pdf.epw,
-            h=pdf.font_size,
-            txt=text,
-            new_x="LMARGIN",
-            new_y="NEXT",
+        link = pdf.add_link(page=section.page_number)
+        p(
+            pdf,
+            f'{" " * section.level * 2} {section.name} {"." * (60 - section.level*2 - len(section.name))} {section.page_number}',
             align="C",
             link=link,
         )
@@ -177,17 +168,44 @@ def test_2_pages_outline(tmp_path):
     assert_pdf_equal(pdf, HERE / "2_pages_outline.pdf", tmp_path)
 
 
-def test_russian_heading(tmp_path):  # issue-320
+def test_toc_with_nb_and_footer(tmp_path):  # issue-548
+    class TestPDF(FPDF):
+        def render_toc(self, outline):
+            self.x = self.l_margin
+            self.set_font(style="", size=12)
+            for section in outline:
+                self.ln()
+                self.cell(txt=section.name)
+
+        def footer(self):
+            self.set_y(-15)
+            self.set_font("helvetica", "I", 8)
+            self.cell(0, 10, f"Page {self.page_no()}/{{nb}}", align="C")
+
+    pdf = TestPDF()
+    pdf.set_font(family="helvetica", size=12)
+    pdf.add_page()
+    pdf.insert_toc_placeholder(TestPDF.render_toc, pages=2)
+    for i in range(1, 80):
+        pdf.set_font(style="B")
+        pdf.start_section(f"Section {i}")
+        pdf.cell(txt=f"Section {i}")
+        pdf.ln()
+
+    assert_pdf_equal(pdf, HERE / "toc_with_nb_and_footer.pdf", tmp_path)
+
+
+def test_toc_with_russian_heading(tmp_path):  # issue-320
     pdf = FPDF()
-    pdf.add_font("Roboto", style="B", fname="test/fonts/Roboto-Regular.ttf")
-    pdf.set_font("Roboto", style="B")
+    pdf.add_font(fname="test/fonts/Roboto-Regular.ttf")
+    pdf.set_font("Roboto-Regular")
     pdf.add_page()
     pdf.start_section("Русский, English, 1 2 3...")
     pdf.write(8, "Русский текст в параграфе.")
     assert_pdf_equal(pdf, HERE / "russian_heading.pdf", tmp_path)
 
 
-def test_thai_headings(tmp_path):  # issue-458
+def test_toc_with_thai_headings(tmp_path):  # issue-458
     pdf = FPDF()
     for txt in [
         "ลักษณะเฉพาะของคุณ",
@@ -200,28 +218,13 @@ def test_thai_headings(tmp_path):  # issue-458
     assert_pdf_equal(pdf, HERE / "thai_headings.pdf", tmp_path)
 
 
-def test_self_refering_outline(tmp_path):
-    """
-    Based on Jens Müller talk at NDSS: Processing Dangerous Paths.
-    As of 2022, neither Adobe Acrobat nor Sumatra PDF readers seem vulnerable.
-    """
-
-    class CustomFPDF(FPDF):
-        def _put_document_outline(self):
-            self._outlines_obj_id = self.n + 1
-            outline, outline_items = build_outline(
-                self._outline, first_object_id=self._outlines_obj_id, fpdf=self
-            )
-            outline.first = f"<< /A << /First {pdf_ref(self._outlines_obj_id)} >> >>"
-            outline_as_str(outline, outline_items, fpdf=self)
-
-    pdf = CustomFPDF()
-    pdf.set_font("Helvetica")
+def test_toc_without_font_style(tmp_path):  # issue-676
+    pdf = FPDF()
+    pdf.set_font("helvetica")
+    pdf.set_section_title_styles(
+        level0=TitleStyle(font_size_pt=28, l_margin=10), level1=TitleStyle()
+    )
     pdf.add_page()
-    p(pdf, "Doc Title", align="C")
-    pdf.start_section("Title 1")
-    p(pdf, "Lorem ipsum dolor sit amet,")
-    pdf.add_page()
-    pdf.start_section("Title 2")
-    p(pdf, "consectetur adipiscing elit,")
-    assert_pdf_equal(pdf, HERE / "self_refering_outline.pdf", tmp_path)
+    pdf.start_section("Title")
+    pdf.start_section("Subtitle", level=1)
+    assert_pdf_equal(pdf, HERE / "toc_without_font_style.pdf", tmp_path)

@@ -79,7 +79,7 @@ pdf.cell(60, 10, 'Powered by FPDF.', new_x="LMARGIN", new_y="NEXT", align='C')
 
 [Текст Жюля Верна](https://github.com/PyFPDF/fpdf2/raw/master/tutorial/20k_c1.txt)
 
-Метод [get_string_width](fpdf/fpdf.html#fpdf.fpdf.FPDF.get_string_width) позволяет определить длину строки в текущем шрифте, которая используется здесь для расчета положения и ширины рамки, окружающей заголовок. Затем устанавливаются цвета (через [set_draw_color](fpdf/fpdf.html#fpdf.fpdf.FPDF.set_draw_color), [set_fill_color](fpdf/fpdf.html#fpdf.fpdf.FPDF.set_fill_color) и [set_text_color](fpdf/fpdf. html#fpdf.fpdf.FPDF.set_text_color)), а толщина линии устанавливается в 1 мм (против 0,2 по умолчанию) с помощью [set_line_width](fpdf/fpdf.html#fpdf.fpdf.FPDF.set_line_width). Наконец, мы выводим ячейку (последний параметр True указывает на то, что фон должен быть заполнен).
+Метод [get_string_width](fpdf/fpdf.html#fpdf.fpdf.FPDF.get_string_width) позволяет определить длину строки в текущем шрифте, которая используется здесь для расчета положения и ширины рамки, окружающей заголовок. Затем устанавливаются цвета (через [set_draw_color](fpdf/fpdf.html#fpdf.fpdf.FPDF.set_draw_color), [set_fill_color](fpdf/fpdf.html#fpdf.fpdf.FPDF.set_fill_color) и [set_text_color](fpdf/fpdf.html#fpdf.fpdf.FPDF.set_text_color)), а толщина линии устанавливается в 1 мм (против 0,2 по умолчанию) с помощью [set_line_width](fpdf/fpdf.html#fpdf.fpdf.FPDF.set_line_width). Наконец, мы выводим ячейку (последний параметр True указывает на то, что фон должен быть заполнен).
 
 Для печати абзацев используется метод [multi_cell](fpdf/fpdf.html#fpdf.fpdf.FPDF.multi_cell). Каждый раз, когда строка достигает правого края ячейки или встречается символ возврата каретки, выдается разрыв строки и автоматически создается новая ячейка под текущей. По умолчанию текст выравнивается по ширине.
 
@@ -105,10 +105,6 @@ pdf.cell(60, 10, 'Powered by FPDF.', new_x="LMARGIN", new_y="NEXT", align='C')
 
 ## Руковдство 5 - Создание таблиц ##
 
-В этом уроке мы расскажем, как можно с легкостью создавать таблицы.
-
-Код создаст три различные таблицы, чтобы объяснить, чего можно достичь с помощью нескольких простых настроек.
-
 ```python
 {% include "../tutorial/tuto5.py" %}
 ```
@@ -116,13 +112,12 @@ pdf.cell(60, 10, 'Powered by FPDF.', new_x="LMARGIN", new_y="NEXT", align='C')
 [Итоговый PDF](https://github.com/PyFPDF/fpdf2/raw/master/tutorial/tuto5.pdf) - 
 [Список стран](https://github.com/PyFPDF/fpdf2/raw/master/tutorial/countries.txt)
 
-Поскольку таблица - это просто набор ячеек, естественно построить таблицу из них.
+_⚠️ This section has changed a lot and requires a new translation: <https://github.com/PyFPDF/fpdf2/issues/267>_
 
-Первый пример достигается самым простым способом: простые ячейки в рамке, все одинакового размера и выровненные по левому краю. Результат элементарен, но достигается очень быстро.
+English versions:
 
-Вторая таблица имеет некоторые улучшения: каждый столбец имеет свою ширину, заголовки выровнены по центру, а цифры - по правому краю. Более того, горизонтальные линии были удалены. Это сделано с помощью параметра border метода Cell(), который указывает, какие стороны ячейки должны быть нарисованы. Здесь нам нужны левая (L) и правая (R). Теперь остается только проблема горизонтальной линии для завершения таблицы. Есть две возможности решить ее: проверить наличие последней строки в цикле, в этом случае мы используем LRB для параметра границы; или, как сделано здесь, добавить линию после завершения цикла.
-
-Третья таблица похожа на вторую, но в ней используются цвета. Цвета заливки, текста и линий просто задаются. Альтернативная окраска строк достигается путем использования поочередно прозрачных и заполненных ячеек.
+* [Tuto 5 - Creating Tables](https://pyfpdf.github.io/fpdf2/Tutorial.html#tuto-5-creating-tables)
+* [Documentation on tables](https://pyfpdf.github.io/fpdf2/Tables.html)
 
 ## Руководство 6 - Создание ссылок и смешивание стилей текста ##
 
@@ -146,7 +141,7 @@ pdf.cell(60, 10, 'Powered by FPDF.', new_x="LMARGIN", new_y="NEXT", align='C')
 
 На первой странице примера мы использовали для этой цели [write()](https://pyfpdf.github.io/fpdf2/fpdf/fpdf.html#fpdf.fpdf.FPDF.write). Начало предложения написано текстом обычного стиля, затем, используя метод [set_font()](https://pyfpdf.github.io/fpdf2/fpdf/fpdf.html#fpdf.fpdf.FPDF.set_font), мы переключились на подчеркивание и закончили предложение.
 
-Для добавления внутренней ссылки, указывающей на вторую страницу, мы использовали метод [add_link()](https://pyfpdf.github.io/fpdf2/fpdf/fpdf.html#fpdf.fpdf.FPDF.add_link), который создает кликабельную область, названную нами "link", которая ведет в другое место внутри документа. На второй странице мы использовали метод [set_link()](https://pyfpdf.github.io/fpdf2/fpdf/fpdf.html#fpdf.fpdf.FPDF.set_link), чтобы определить целевую зону для только что созданной ссылки.
+Для добавления внутренней ссылки, указывающей на вторую страницу, мы использовали метод [add_link()](https://pyfpdf.github.io/fpdf2/fpdf/fpdf.html#fpdf.fpdf.FPDF.add_link), который создает кликабельную область, названную нами "link", которая ведет в другое место внутри документа.
 
 Чтобы создать внешнюю ссылку с помощью изображения, мы использовали метод [image()](https://pyfpdf.github.io/fpdf2/fpdf/fpdf.html#fpdf.fpdf.FPDF.image). Этот метод имеет возможность передать ссылку в качестве одного из аргументов. Ссылка может быть как внутренней, так и внешней.
 

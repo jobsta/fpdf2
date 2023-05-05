@@ -1,17 +1,15 @@
 from pathlib import Path
 
-from fpdf import FPDF, HTMLMixin
+from fpdf import FPDF
 from test.conftest import assert_pdf_equal
+
+import pytest
 
 HERE = Path(__file__).resolve().parent
 
 
-class PDF(FPDF, HTMLMixin):
-    pass
-
-
 def test_links(tmp_path):
-    pdf = PDF()
+    pdf = FPDF()
     pdf.add_page()
     pdf.set_font("helvetica", size=24)
     line_height = 10
@@ -108,7 +106,7 @@ def test_link_with_zoom_and_shift(tmp_path):
 
 def test_link_border(tmp_path):
     "Acrobat renders this border it but not Sumatra"
-    pdf = PDF()
+    pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", size=24)
 
@@ -127,3 +125,62 @@ def test_link_border(tmp_path):
     )
 
     assert_pdf_equal(pdf, HERE / "link_border.pdf", tmp_path)
+
+
+def test_inserting_same_page_link_twice(tmp_path):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.link(
+        x=pdf.l_margin,
+        y=pdf.t_margin,
+        w=pdf.epw,
+        h=pdf.eph,
+        link=pdf.add_link(page=2),
+    )
+    pdf.add_page()
+    pdf.link(
+        x=pdf.l_margin,
+        y=pdf.t_margin,
+        w=pdf.epw,
+        h=pdf.eph,
+        link=pdf.add_link(page=2),
+    )
+    assert_pdf_equal(pdf, HERE / "inserting_same_page_link_twice.pdf", tmp_path)
+
+
+def test_inserting_link_to_non_exising_page():
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.link(
+        x=pdf.l_margin,
+        y=pdf.t_margin,
+        w=pdf.epw,
+        h=pdf.eph,
+        link=pdf.add_link(page=2),
+    )
+    with pytest.raises(ValueError):
+        pdf.output()
+
+
+def test_inserting_link_with_no_page_number():
+    pdf = FPDF()
+    link = pdf.add_link()
+    pdf.add_page()
+    pdf.set_font("helvetica", size=12)
+    with pytest.raises(ValueError):
+        pdf.cell(txt="Page 1", link=link)
+
+
+def test_later_call_to_set_link(tmp_path):  # v2.6.1 bug spotted in discussion 729
+    pdf = FPDF()
+    pdf.set_font("helvetica")
+
+    pdf.add_page()  # page 1
+    link_to_section1 = pdf.add_link()
+    pdf.cell(txt="Section 1", link=link_to_section1)
+
+    pdf.add_page()  # page 2
+    pdf.set_link(link_to_section1, page=pdf.page)
+    pdf.cell(txt="Section 1: Bla bla bla")
+
+    assert_pdf_equal(pdf, HERE / "later_call_to_set_link.pdf", tmp_path)

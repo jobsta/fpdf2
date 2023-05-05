@@ -29,13 +29,13 @@ Note that a page break will always be triggered after inserting the table of con
 
 ## With HTML ##
 
-When using [`fpdf.HTMLMixin`](HTML.md), a document outline is automatically built.
+When using [`FPDF.write_html`](HTML.md), a document outline is automatically built.
 You can insert a table of content with the special `<toc>` tag.
 
 Custom styling of the table of contents can be achieved by overriding the `render_toc` method
-in a subclass of `fpdf.html.HTML2FPDF`:
+in a subclass of `FPDF`:
 ```python
-from fpdf import FPDF, HTMLMixin, HTML2FPDF
+from fpdf import FPDF, HTML2FPDF
 
 class CustomHTML2FPDF(HTML2FPDF):
     def render_toc(self, pdf, outline):
@@ -43,7 +43,7 @@ class CustomHTML2FPDF(HTML2FPDF):
         for section in outline:
             pdf.cell(txt=f'* {section.name} (page {section.page_number})', new_x="LMARGIN", new_y="NEXT")
 
-class PDF(FPDF, HTMLMixin):
+class PDF(FPDF):
     HTML2FPDF_CLASS = CustomHTML2FPDF
 
 pdf = PDF()
@@ -63,7 +63,7 @@ pdf.output("html_toc.pdf")
 
 The regression tests are a good place to find code samples.
 
-For example, the [`test_simple_outline`](https://github.com/PyFPDF/fpdf2/blob/master/test/outline/test_outline.py) test function generates the PDF document [test_simple_outline.pdf](https://github.com/PyFPDF/fpdf2/blob/master/test/outline/test_simple_outline.pdf).
+For example, the [`test_simple_outline`](https://github.com/PyFPDF/fpdf2/blob/master/test/outline/test_outline.py) test function generates the PDF document [simple_outline.pdf](https://github.com/PyFPDF/fpdf2/blob/master/test/outline/simple_outline.pdf).
 
 Similarly, [`test_html_toc`](https://github.com/PyFPDF/fpdf2/blob/master/test/outline/test_outline_html.py)
 generates [test_html_toc.pdf](https://github.com/PyFPDF/fpdf2/blob/5453422bf560a909229c82e53eb516e44fea1817/test/outline/test_html_toc.pdf).

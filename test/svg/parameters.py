@@ -12,19 +12,10 @@ from fpdf.drawing import (
     IntersectionRule,
     GraphicsStyle,
     Move,
-    RelativeMove,
     Line,
-    RelativeLine,
-    HorizontalLine,
-    RelativeHorizontalLine,
-    VerticalLine,
-    RelativeVerticalLine,
     BezierCurve,
-    RelativeBezierCurve,
     QuadraticBezierCurve,
-    RelativeQuadraticBezierCurve,
     Arc as A,
-    RelativeArc as a,
     ImplicitClose,
     Close,
     RoundedRectangle,
@@ -33,10 +24,6 @@ from fpdf.drawing import (
 
 from fpdf.svg import (
     resolve_length,
-    SVGSmoothCubicCurve,
-    SVGRelativeSmoothCubicCurve,
-    SVGSmoothQuadraticCurve,
-    SVGRelativeSmoothQuadraticCurve,
 )
 
 SVG_SOURCE_DIR = Path(__file__).resolve().parent / "svg_sources"
@@ -63,21 +50,9 @@ def pointifier(source_fn):
 
 
 M = pointifier(Move)
-m = pointifier(RelativeMove)
 L = pointifier(Line)
-l = pointifier(RelativeLine)
-H = lambda arg: HorizontalLine(float(arg))
-h = lambda arg: RelativeHorizontalLine(float(arg))
-V = lambda arg: VerticalLine(float(arg))
-v = lambda arg: RelativeVerticalLine(float(arg))
 C = pointifier(BezierCurve)
-c = pointifier(RelativeBezierCurve)
 Q = pointifier(QuadraticBezierCurve)
-q = pointifier(RelativeQuadraticBezierCurve)
-S = pointifier(SVGSmoothCubicCurve)
-s = pointifier(SVGRelativeSmoothCubicCurve)
-T = pointifier(SVGSmoothQuadraticCurve)
-t = pointifier(SVGRelativeSmoothQuadraticCurve)
 iz = pointifier(ImplicitClose)
 Z = pointifier(Close)
 
@@ -96,6 +71,12 @@ def Gs(**kwargs):
 
 
 test_svg_shape_tags = (
+    pytest.param(
+        '<rect x="20" y="20" width="25.4mm" height="2.54 cm"/>',
+        [M(0, 0), Re(20, 20, 72, 72, 0, 0)],
+        no_error(),
+        id="rect",
+    ),
     pytest.param(
         '<rect x="20" y="20" width="60" height="60"/>',
         [M(0, 0), Re(20, 20, 60, 60, 0, 0)],
@@ -161,6 +142,12 @@ test_svg_shape_tags = (
         [M(0, 0), Re(20, 20, 60, 60, 30, 30)],
         no_error(),
         id="rect overlarge rx and ry",
+    ),
+    pytest.param(  # spotted in issue #720
+        '<rect x="1mm" y="1mm" width="100%" height="100%"/>',
+        [M(0.0, 0.0), Re(2.834645669291339, 2.834645669291339, 100, 100, 0, 0)],
+        no_error(),
+        id="rect with mm and percents",
     ),
     pytest.param(
         '<rect x="20" y="20" width="500" height="60" rx="-100" ry="10"/>',
@@ -379,8 +366,8 @@ test_svg_transforms = (
         id="skew x-only",
     ),
     pytest.param(
-        "skew(2, 3)",
-        Transform.shearing(x=math.tan(math.radians(2)), y=math.tan(math.radians(3))),
+        "skew(3, 3)",
+        Transform.shearing(x=math.tan(math.radians(3))),
         no_error(),
         id="skew x and y",
     ),
@@ -580,6 +567,12 @@ test_svg_attribute_conversion = (
         no_error(),
         id="stroke-width number",
     ),
+    pytest.param(  # issue #526
+        '<path stroke-width="2px"/>',
+        Gs(stroke_width=2 * 0.75),
+        no_error(),
+        id="stroke-width number",
+    ),
     pytest.param(
         '<path stroke-width="inherit"/>',
         Gs(),
@@ -596,7 +589,7 @@ test_svg_attribute_conversion = (
         '<path stroke-width="bad"/>',
         Gs(),
         pytest.raises(ValueError),
-        id="stroke-width number",
+        id="stroke-width invalid",
     ),
     pytest.param(
         '<path stroke-dasharray="1 2 3 4 5"/>',
@@ -783,17 +776,15 @@ svg_path_edge_cases = (
     pytest.param(
         " M    0   1  L  2   3 z  ", [M(0, 1), L(2, 3), Z()], id="extra whitespace"
     ),
-    pytest.param("M0,1l2,3", [M(0, 1), L(2, 3)], id="comma separation"),
+    pytest.param("M0,1l2,3", [M(0, 1), L(2, 4)], id="comma separation"),
     pytest.param("M 0 , 1 L 2 , 3", [M(0, 1), L(2, 3)], id="commas and spaces"),
     pytest.param("M 0,1 L-2-3", [M(0, 1), L(-2, -3)], id="negative number separation"),
     pytest.param("M 0,1 L+2+3", [M(0, 1), L(2, 3)], id="unary plus number separation"),
     pytest.param("M 0 1 2 3 4 5", [M(0, 1), L(2, 3), L(4, 5)], id="implicit L"),
-    pytest.param(
-        "m 0 1 2 3 4 5", [M(0, 0), m(0, 1), l(2, 3), l(4, 5)], id="implicit l"
-    ),
+    pytest.param("m 0 1 2 3 4 5", [M(0, 1), L(2, 4), L(6, 9)], id="implicit l"),
     pytest.param(
         "m 0. .1 L 2.2 3.3",
-        [M(0, 0), m(0, 0.1), L(2.2, 3.3)],
+        [M(0, 0.1), L(2.2, 3.3)],
         id="floating point numbers",
     ),
     pytest.param("M0..1L.2.3.4.5", [M(0.0, 0.1), L(0.2, 0.3), L(0.4, 0.5)], id="why"),
@@ -801,22 +792,22 @@ svg_path_edge_cases = (
 
 svg_path_directives = (
     pytest.param("M 0 1 L 2 3", [M(0, 1), L(2, 3)], id="line"),
-    pytest.param("m 0 1 l 2 3", [M(0, 0), m(0, 1), l(2, 3)], id="relative line"),
-    pytest.param("M 0 1 H 2", [M(0, 1), H(2)], id="horizontal line"),
-    pytest.param("M 0 1 h 2", [M(0, 1), h(2)], id="relative horizontal line"),
-    pytest.param("M 0 1 V 2", [M(0, 1), V(2)], id="vertical line"),
-    pytest.param("M 0 1 v 2", [M(0, 1), v(2)], id="relative vertical line"),
+    pytest.param("m 0 1 l 2 3", [M(0, 1), L(2, 4)], id="relative line"),
+    pytest.param("M 0 1 H 2", [M(0, 1), L(2, 1)], id="horizontal line"),
+    pytest.param("M 0 1 h 2", [M(0, 1), L(2, 1)], id="relative horizontal line"),
+    pytest.param("M 0 1 V 2", [M(0, 1), L(0, 2)], id="vertical line"),
+    pytest.param("M 0 1 v 2", [M(0, 1), L(0, 3)], id="relative vertical line"),
     pytest.param(
         "M 0 1 C 2 3 4 5 6 7", [M(0, 1), C(2, 3, 4, 5, 6, 7)], id="cubic bezier"
     ),
     pytest.param(
         "M 0 1 c 2 3 4 5 6 7",
-        [M(0, 1), c(2, 3, 4, 5, 6, 7)],
+        [M(0, 1), C(2, 4, 4, 6, 6, 8)],
         id="relative cubic bezier",
     ),
     pytest.param("M 0 1 Q 2 3 4 5", [M(0, 1), Q(2, 3, 4, 5)], id="quadratic bezier"),
     pytest.param(
-        "M 0 1 q 2 3 4 5", [M(0, 1), q(2, 3, 4, 5)], id="relative quadratic bezier"
+        "M 0 1 q 2 3 4 5", [M(0, 1), Q(2, 4, 4, 6)], id="relative quadratic bezier"
     ),
     pytest.param(
         "M 0 1 A 2 3 0 1 0 4 5",
@@ -825,27 +816,27 @@ svg_path_directives = (
     ),
     pytest.param(
         "M 0 1 a 2 3 0 1 0 4 5",
-        [M(0, 1), a(P(2, 3), 0, True, False, P(4, 5))],
+        [M(0, 1), A(P(2, 3), 0, True, False, P(4, 6))],
         id="relative arc",
     ),
     pytest.param(
         "M 0 1 C 2 3 4 5 6 7 S 8 9 10 11",
-        [M(0, 1), C(2, 3, 4, 5, 6, 7), S(8, 9, 10, 11)],
+        [M(0, 1), C(2, 3, 4, 5, 6, 7), C(8, 9, 8, 9, 10, 11)],
         id="smooth cubic bezier",
     ),
     pytest.param(
         "M 0 1 C 2 3 4 5 6 7 s 8 9 10 11",
-        [M(0, 1), C(2, 3, 4, 5, 6, 7), s(8, 9, 10, 11)],
+        [M(0, 1), C(2, 3, 4, 5, 6, 7), C(8, 9, 14, 16, 16, 18)],
         id="relative smooth cubic bezier",
     ),
     pytest.param(
         "M 0 1 Q 2 3 4 5 T 6 7",
-        [M(0, 1), Q(2, 3, 4, 5), T(6, 7)],
+        [M(0, 1), Q(2, 3, 4, 5), Q(6, 7, 6, 7)],
         id="smooth quadratic bezier",
     ),
     pytest.param(
         "M 0 1 Q 2 3 4 5 t 6 7",
-        [M(0, 1), Q(2, 3, 4, 5), t(6, 7)],
+        [M(0, 1), Q(2, 3, 4, 5), Q(6, 7, 10, 12)],
         id="relative smooth quadratic bezier",
     ),
     pytest.param("M 0 1 z", [M(0, 1), Z()], id="close"),
@@ -856,12 +847,12 @@ svg_path_directives = (
     ),
     pytest.param(
         "M 0 0 c -7e-5 -4e-5 -8.8492 -3.1382 -8.8493 -3.1383",
-        [M(0, 0), c(-7e-5, -4e-5, -8.8492, -3.1382, -8.8493, -3.1383)],
+        [M(0, 0), C(-7e-5, -4e-5, -8.8492, -3.1382, -8.8493, -3.1383)],
         id="exponentiated numbers",  # cf. issue #376
     ),
     pytest.param(
         "M 0 1 a5.168 5.168 0 013.06-1.837",
-        [M(0, 1), a(P(5.168, 5.168), 0.0, False, True, P(3.06, -1.837))],
+        [M(0, 1), A(P(5.168, 5.168), 0.0, False, True, P(3.06, -0.837))],
         id="arc with joined arguments",  # cf. issue #450
     ),
 )
@@ -911,13 +902,15 @@ svg_path_render_tests = (
 
 svg_path_implicit_directives = (
     pytest.param("M 0 1 L 2 3 4 5", [M(0, 1), L(2, 3), L(4, 5)], id="line"),
+    pytest.param("m 0 1 l 2 3 4 5", [M(0, 1), L(2, 4), L(6, 9)], id="relative line"),
+    pytest.param("M 0 1 H 2 3", [M(0, 1), L(2, 1), L(3, 1)], id="horizontal line"),
     pytest.param(
-        "m 0 1 l 2 3 4 5", [M(0, 0), m(0, 1), l(2, 3), l(4, 5)], id="relative line"
+        "M 0 1 h 2 3", [M(0, 1), L(2, 1), L(5, 1)], id="relative horizontal line"
     ),
-    pytest.param("M 0 1 H 2 3", [M(0, 1), H(2), H(3)], id="horizontal line"),
-    pytest.param("M 0 1 h 2 3", [M(0, 1), h(2), h(3)], id="relative horizontal line"),
-    pytest.param("M 0 1 V 2 3", [M(0, 1), V(2), V(3)], id="vertical line"),
-    pytest.param("M 0 1 v 2 3", [M(0, 1), v(2), v(3)], id="relative vertical line"),
+    pytest.param("M 0 1 V 2 3", [M(0, 1), L(0, 2), L(0, 3)], id="vertical line"),
+    pytest.param(
+        "M 0 1 v 2 3", [M(0, 1), L(0, 3), L(0, 6)], id="relative vertical line"
+    ),
     pytest.param(
         "M 0 1 C 2 3 4 5 6 7 8 9 10 11 12 13",
         [M(0, 1), C(2, 3, 4, 5, 6, 7), C(8, 9, 10, 11, 12, 13)],
@@ -925,7 +918,7 @@ svg_path_implicit_directives = (
     ),
     pytest.param(
         "M 0 1 c 2 3 4 5 6 7 8 9 10 11 12 13",
-        [M(0, 1), c(2, 3, 4, 5, 6, 7), c(8, 9, 10, 11, 12, 13)],
+        [M(0, 1), C(2, 4, 4, 6, 6, 8), C(14, 17, 16, 19, 18, 21)],
         id="relative cubic bezier",
     ),
     pytest.param(
@@ -935,7 +928,7 @@ svg_path_implicit_directives = (
     ),
     pytest.param(
         "M 0 1 q 2 3 4 5 6 7 8 9",
-        [M(0, 1), q(2, 3, 4, 5), q(6, 7, 8, 9)],
+        [M(0, 1), Q(2, 4, 4, 6), Q(10, 13, 12, 15)],
         id="relative quadratic bezier",
     ),
     pytest.param(
@@ -951,29 +944,39 @@ svg_path_implicit_directives = (
         "M 0 1 a 2 3 0 1 0 4 5 6 7 0 1 0 8 9",
         [
             M(0, 1),
-            a(P(2, 3), 0, True, False, P(4, 5)),
-            a(P(6, 7), 0, True, False, P(8, 9)),
+            A(P(2, 3), 0, True, False, P(4, 6)),
+            A(P(6, 7), 0, True, False, P(12, 15)),
         ],
         id="relative arc",
     ),
     pytest.param(
         "M 0 1 C 2 3 4 5 6 7 S 8 9 10 11 12 13 14 15",
-        [M(0, 1), C(2, 3, 4, 5, 6, 7), S(8, 9, 10, 11), S(12, 13, 14, 15)],
+        [
+            M(0, 1),
+            C(2, 3, 4, 5, 6, 7),
+            C(8, 9, 8, 9, 10, 11),
+            C(12, 13, 12, 13, 14, 15),
+        ],
         id="smooth cubic bezier",
     ),
     pytest.param(
         "M 0 1 C 2 3 4 5 6 7 s 8 9 10 11 12 13 14 15",
-        [M(0, 1), C(2, 3, 4, 5, 6, 7), s(8, 9, 10, 11), s(12, 13, 14, 15)],
+        [
+            M(0, 1),
+            C(2, 3, 4, 5, 6, 7),
+            C(8, 9, 14, 16, 16, 18),
+            C(18, 20, 28, 31, 30, 33),
+        ],
         id="relative smooth cubic bezier",
     ),
     pytest.param(
         "M 0 1 Q 2 3 4 5 T 6 7 8 9",
-        [M(0, 1), Q(2, 3, 4, 5), T(6, 7), T(8, 9)],
+        [M(0, 1), Q(2, 3, 4, 5), Q(6, 7, 6, 7), Q(6, 7, 8, 9)],
         id="smooth quadratic bezier",
     ),
     pytest.param(
         "M 0 1 Q 2 3 4 5 t 6 7 8 9",
-        [M(0, 1), Q(2, 3, 4, 5), t(6, 7), t(8, 9)],
+        [M(0, 1), Q(2, 3, 4, 5), Q(6, 7, 10, 12), Q(14, 17, 18, 21)],
         id="relative smooth quadratic bezier",
     ),
 )

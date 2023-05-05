@@ -3,15 +3,16 @@ import hashlib
 from datetime import timezone
 from unittest.mock import patch
 
-from .syntax import build_obj_dict
-from .syntax import create_dictionary_string
+from .syntax import build_obj_dict, Name
+from .syntax import create_dictionary_string as pdf_dict
+from .util import buffer_subst
 
 
 class Signature:
     def __init__(self, contact_info=None, location=None, m=None, reason=None):
-        self.type = "/Sig"
-        self.filter = "/Adobe.PPKLite"
-        self.sub_filter = "/adbe.pkcs7.detached"
+        self.type = Name("Sig")
+        self.filter = Name("Adobe.PPKLite")
+        self.sub_filter = Name("adbe.pkcs7.detached")
         self.contact_info = contact_info
         "Information provided by the signer to enable a recipient to contact the signer to verify the signature"
         self.location = location
@@ -23,13 +24,20 @@ class Signature:
         self.byte_range = _SIGNATURE_BYTERANGE_PLACEHOLDER
         self.contents = "<" + _SIGNATURE_CONTENTS_PLACEHOLDER + ">"
 
-    def serialize(self):
-        obj_dict = build_obj_dict({key: getattr(self, key) for key in dir(self)})
-        return create_dictionary_string(obj_dict)
+    def serialize(self, _security_handler=None, _obj_id=None):
+        obj_dict = build_obj_dict(
+            {key: getattr(self, key) for key in dir(self)},
+            _security_handler=_security_handler,
+            _obj_id=_obj_id,
+        )
+        return pdf_dict(obj_dict)
 
 
 def sign_content(signer, buffer, key, cert, extra_certs, hashalgo, sign_time):
-    "Perform PDF signing based on the content of the buffer, performing substitutions on it."
+    """
+    Perform PDF signing based on the content of the buffer, performing substitutions on it.
+    The signing operation does not alter the buffer size
+    """
     # We start by substituting the ByteRange,
     # that defines which part of the document content the signature is based on.
     # This is basically ALL the content EXCEPT the signature content itself.
@@ -37,11 +45,12 @@ def sign_content(signer, buffer, key, cert, extra_certs, hashalgo, sign_time):
     start_index = buffer.find(sig_placeholder)
     end_index = start_index + len(sig_placeholder)
     content_range = (0, start_index - 1, end_index + 1, len(buffer) - end_index - 1)
-    br_placeholder = _SIGNATURE_BYTERANGE_PLACEHOLDER.encode()
-    byte_range = b"[%010d %010d %010d %010d]" % content_range
-    # Sanity check, otherwise we will break the xref table:
-    assert len(br_placeholder) == len(byte_range)
-    buffer = buffer.replace(br_placeholder, byte_range, 1)
+    # pylint: disable=consider-using-f-string
+    buffer = buffer_subst(
+        buffer,
+        _SIGNATURE_BYTERANGE_PLACEHOLDER,
+        "[%010d %010d %010d %010d]" % content_range,
+    )
 
     # We compute the ByteRange hash, of everything before & after the placeholder:
     content_hash = hashlib.new(hashalgo)

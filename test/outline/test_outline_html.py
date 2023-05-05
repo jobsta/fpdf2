@@ -1,21 +1,19 @@
 from pathlib import Path
+import warnings
 
-from fpdf import FPDF, HTMLMixin, HTML2FPDF
+from fpdf import FPDF, HTML2FPDF
 from test.conftest import assert_pdf_equal
 
 
 HERE = Path(__file__).resolve().parent
 
 
-class MyFPDF(FPDF, HTMLMixin):
-    pass
-
-
 def test_html_toc(tmp_path):
-    pdf = MyFPDF()
+    pdf = FPDF()
     pdf.add_page()
     pdf.write_html(
-        """<h1>Document title</h1>
+        """
+        <h1>Document title</h1>
         <br><br><br>
         <u>Table of content:</u>
         <br>
@@ -24,29 +22,30 @@ def test_html_toc(tmp_path):
             <section><h3>Subtitle 1.1</h3>
             Lorem ipsum dolor sit amet, consectetur adipiscing elit,
             sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-            <section>
+            </section>
             <br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>
             <section><h3>Subtitle 1.2</h3><br>
             Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
-            <section>
-        <section>
+            </section>
+        </section>
         <br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>
         <br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>
         <section><h2>Subtitle 2</h2><br>
             <section><h3>Subtitle 2.1</h3><br>
             Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
-            <section>
+            </section>
             <br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>
             <section><h3>Subtitle 2.2</h3><br>
             Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
-            <section>
-        <section>"""
+            </section>
+        </section>
+        """
     )
     assert_pdf_equal(pdf, HERE / "html_toc.pdf", tmp_path)
 
 
 def test_html_toc_2_pages(tmp_path):
-    pdf = MyFPDF()
+    pdf = FPDF()
     pdf.add_page()
     pdf.write_html(
         """<h1>Document title</h1>
@@ -228,7 +227,7 @@ def test_html_toc_2_pages(tmp_path):
 
 
 def test_html_toc_with_h1_as_2nd_heading(tmp_path):  # issue 239
-    pdf = MyFPDF()
+    pdf = FPDF()
     pdf.add_page()
     pdf.write_html(
         """<toc></toc>
@@ -241,30 +240,35 @@ def test_html_toc_with_h1_as_2nd_heading(tmp_path):  # issue 239
     assert_pdf_equal(pdf, HERE / "html_toc_with_h1_as_2nd_heading.pdf", tmp_path)
 
 
-def test_custom_HTML2FPDF(tmp_path):  # issue 240
-    class CustomHTML2FPDF(HTML2FPDF):
-        def render_toc(self, pdf, outline):
-            pdf.cell(txt="Table of contents:", new_x="LMARGIN", new_y="NEXT")
-            for section in outline:
-                pdf.cell(
-                    txt=f"* {section.name} (page {section.page_number})",
-                    new_x="LMARGIN",
-                    new_y="NEXT",
-                )
+class CustomHTML2FPDF(HTML2FPDF):
+    def render_toc(self, pdf, outline):
+        pdf.cell(txt="Table of contents:", new_x="LMARGIN", new_y="NEXT")
+        for section in outline:
+            pdf.cell(
+                txt=f"* {section.name} (page {section.page_number})",
+                new_x="LMARGIN",
+                new_y="NEXT",
+            )
 
-    class CustomPDF(FPDF, HTMLMixin):
+
+def test_custom_HTML2FPDF(tmp_path):  # issue 240 & 670
+    class PDF(FPDF):
         HTML2FPDF_CLASS = CustomHTML2FPDF
 
-    pdf = CustomPDF()
+    pdf = PDF()
     pdf.add_page()
-    pdf.write_html(
-        """<toc></toc>
+
+    # Ensure no warning is raised:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        pdf.write_html(
+            """<toc></toc>
         <h1>Level 1</h1>
         <h2>Level 2</h2>
         <h3>Level 3</h3>
         <h4>Level 4</h4>
         <h5>Level 5</h5>
         <h6>Level 6</h6>
-        <p>paragraph<p>"""
-    )
+        <p>paragraph</p>"""
+        )
     assert_pdf_equal(pdf, HERE / "custom_HTML2FPDF.pdf", tmp_path)

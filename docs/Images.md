@@ -2,7 +2,8 @@
 
 When rendering an image, its size on the page can be specified in several ways:
 
-* explicit width and height (expressed in user units)
+* explicit width and height (expressed in user units).
+  The image is scaled to those dimensions, unless `keep_aspect_ratio=True` is specified.
 * one explicit dimension, the other being calculated automatically in order to keep the original proportions
 * no explicit dimension, in which case the image is put at 72 dpi
 
@@ -24,6 +25,14 @@ By default an image is rendered with a resolution of 72 dpi,
 but you can control its dimension on the page using the `w=` & `h=` parameters of the [`image()`](fpdf/fpdf.html#fpdf.fpdf.FPDF.image) method.
 
 
+## Alpha / transparency ##
+
+`fpdf2` allows to embed images with alpha pixels.
+
+Technically, it is implemented by extracting an `/SMask` from images with transparency,
+and inserting it along with the image data in the PDF document. Related code is in the [image_parsing]( https://github.com/PyFPDF/fpdf2/blob/master/fpdf/image_parsing.py) module.
+
+
 ## Assembling images ##
 The following code snippets provide examples of some basic layouts for assembling images into PDF files.
 
@@ -40,6 +49,17 @@ pdf.set_y(0)
 pdf.image("imgB.jpg", h=pdf.eph, w=pdf.epw/2, x=pdf.epw/2)  # full page height, half page width, right half of the page
 pdf.output("side-by-side.pdf")
 ```
+
+### Fitting an image inside a rectangle ###
+
+When you want to scale an image to fill a rectangle, while keeping its aspect ratio,
+and ensuring it does **not** overflow the rectangle width nor height in the process,
+you can set `w` / `h` and also provide `keep_aspect_ratio=True` to the [`image()`](fpdf/fpdf.html#fpdf.fpdf.FPDF.image) method.
+
+The following unit tests illustrate that:
+
+* [test_image_fit.py](https://github.com/PyFPDF/fpdf2/blob/master/test/image/test_image_fit.py)
+* resulting document: [image_fit_in_rect.pdf](https://github.com/PyFPDF/fpdf2/blob/master/test/image/image_fit_in_rect.pdf)
 
 ### Blending images ###
 
@@ -130,10 +150,10 @@ pdf.image("https://upload.wikimedia.org/wikipedia/commons/7/70/Example.png")
 
 ## Image compression ##
 
-By default, `fpdf2` will avoid altering your images :
-no image conversion from / to PNG / JPEG is performed.
+By default, `fpdf2` will avoid altering or recompressing your images: when possible, the original bytes from the JPG or TIFF file will be used directly. Bitonal images are by default compressed as TIFF Group4.
 
-However, you can easily tell `fpdf2` to convert and embed all images as JPEGs in order to reduce your PDF size:
+However, you can easily tell `fpdf2` to embed all images as JPEGs in order to reduce your PDF size,
+using [`set_image_filter()`](fpdf/fpdf.html#fpdf.fpdf.FPDF.set_image_filter):
 
 ```python
 from fpdf import FPDF
@@ -145,8 +165,14 @@ pdf.image("docs/fpdf2-logo.png", x=20, y=60)
 pdf.output("pdf-with-image.pdf")
 ```
 
-Beware that "flattening" images this way will fill transparent areas of your images with color (usually black).
+Beware that "flattening" images into JPEGs this way will fill transparent areas of your images with color (usually black).
 
+The allowed `image_filter` values are listed in the [image_parsing]( https://github.com/PyFPDF/fpdf2/blob/master/fpdf/image_parsing.py) module and are currently:
+`FlateDecode` (lossless zlib/deflate compression), `DCTDecode` (lossy compression with JPEG) and `JPXDecode` (lossy compression with JPEG2000).
+
+## ICC Profiles
+
+The ICC profile of the included images are read through the PIL function `Image.info.get("icc_profile)"` and are included in the PDF as objects.
 
 ## Oversized images detection & downscaling ##
 
@@ -201,3 +227,33 @@ pdf.output("pdf-including-image-without-transparency.pdf")
 This will fill transparent areas of your images with color (usually black).
 
 _cf._ also documentation on [controlling transparency](Transparency.md).
+
+
+## Page background ##
+
+_cf._ [Per-page format, orientation and background](PageFormatAndOrientation.md#per-page-format-orientation-and-background)
+
+
+## Sharing the image cache among FPDF instances ##
+
+Image parsing is often the most CPU & memory intensive step when inserting pictures in a PDF.
+
+If you create several PDF files that use the same illustrations,
+you can share the images cache among FPDF instances:
+
+```python
+images_cache = {}
+
+for ... # loop
+    pdf = FPDF()
+    pdf.images = images_cache
+    ... # build the PDF
+    pdf.output(...)
+    # Reset the "usages" count, to avoid ALL images to be inserted in subsequent PDFs:
+    for img in images_cache.values():
+        img["usages"] = 0
+```
+
+This recipe is valid for `fpdf2` v2.5.7+.
+For previous versions of `fpdf2`, a _deepcopy_ of `.images` must be made,
+(_cf._ [issue #501](https://github.com/PyFPDF/fpdf2/issues/501#issuecomment-1224310277)).

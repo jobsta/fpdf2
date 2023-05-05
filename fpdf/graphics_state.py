@@ -1,5 +1,6 @@
 from .drawing import DeviceGray
-from .enums import TextMode
+from .enums import CharVPos, TextEmphasis, TextMode
+from .fonts import FontFace
 
 
 class GraphicsStateMixin:
@@ -27,12 +28,22 @@ class GraphicsStateMixin:
                 underline=False,
                 font_style="",
                 font_stretching=100,
+                char_spacing=0,
                 font_family="",
                 font_size_pt=0,
                 current_font={},
                 dash_pattern=dict(dash=0, gap=0, phase=0),
                 line_width=0,
                 text_mode=TextMode.FILL,
+                char_vpos=CharVPos.LINE,
+                sub_scale=0.7,
+                sup_scale=0.7,
+                nom_scale=0.75,
+                denom_scale=0.75,
+                sub_lift=-0.15,
+                sup_lift=0.4,
+                nom_lift=0.2,
+                denom_lift=0.0,
             ),
         ]
         super().__init__(*args, **kwargs)
@@ -42,6 +53,9 @@ class GraphicsStateMixin:
 
     def _pop_local_stack(self):
         del self.__statestack[-1]
+
+    def _get_current_graphics_state(self):
+        return self.__statestack[-1].copy()
 
     @property
     def draw_color(self):
@@ -90,6 +104,14 @@ class GraphicsStateMixin:
     @font_stretching.setter
     def font_stretching(self, v):
         self.__statestack[-1]["font_stretching"] = v
+
+    @property
+    def char_spacing(self):
+        return self.__statestack[-1]["char_spacing"]
+
+    @char_spacing.setter
+    def char_spacing(self, v):
+        self.__statestack[-1]["char_spacing"] = v
 
     @property
     def font_family(self):
@@ -146,3 +168,164 @@ class GraphicsStateMixin:
     @text_mode.setter
     def text_mode(self, v):
         self.__statestack[-1]["text_mode"] = TextMode.coerce(v)
+
+    @property
+    def char_vpos(self):
+        """
+        Return vertical character position relative to line.
+        ([docs](../TextStyling.html#subscript-superscript-and-fractional-numbers))
+        """
+        return self.__statestack[-1]["char_vpos"]
+
+    @char_vpos.setter
+    def char_vpos(self, v):
+        """
+        Set vertical character position relative to line.
+        ([docs](../TextStyling.html#subscript-superscript-and-fractional-numbers))
+        """
+        self.__statestack[-1]["char_vpos"] = CharVPos.coerce(v)
+
+    @property
+    def sub_scale(self):
+        """
+        Return scale factor for subscript text.
+        ([docs](../TextStyling.html#subscript-superscript-and-fractional-numbers))
+        """
+        return self.__statestack[-1]["sub_scale"]
+
+    @sub_scale.setter
+    def sub_scale(self, v):
+        """
+        Set scale factor for subscript text.
+        ([docs](../TextStyling.html#subscript-superscript-and-fractional-numbers))
+        """
+        self.__statestack[-1]["sub_scale"] = float(v)
+
+    @property
+    def sup_scale(self):
+        """
+        Return scale factor for superscript text.
+        ([docs](../TextStyling.html#subscript-superscript-and-fractional-numbers))
+        """
+        return self.__statestack[-1]["sup_scale"]
+
+    @sup_scale.setter
+    def sup_scale(self, v):
+        """
+        Set scale factor for superscript text.
+        ([docs](../TextStyling.html#subscript-superscript-and-fractional-numbers))
+        """
+        self.__statestack[-1]["sup_scale"] = float(v)
+
+    @property
+    def nom_scale(self):
+        """
+        Return scale factor for nominator text.
+        ([docs](../TextStyling.html#subscript-superscript-and-fractional-numbers))
+        """
+        return self.__statestack[-1]["nom_scale"]
+
+    @nom_scale.setter
+    def nom_scale(self, v):
+        """
+        Set scale factor for nominator text.
+        ([docs](../TextStyling.html#subscript-superscript-and-fractional-numbers))
+        """
+        self.__statestack[-1]["nom_scale"] = float(v)
+
+    @property
+    def denom_scale(self):
+        """
+        Return scale factor for denominator text.
+        ([docs](../TextStyling.html#subscript-superscript-and-fractional-numbers))
+        """
+        return self.__statestack[-1]["denom_scale"]
+
+    @denom_scale.setter
+    def denom_scale(self, v):
+        """
+        Set scale factor for denominator text.
+        ([docs](../TextStyling.html#subscript-superscript-and-fractional-numbers))
+        """
+        self.__statestack[-1]["denom_scale"] = float(v)
+
+    @property
+    def sub_lift(self):
+        """
+        Return lift factor for subscript text.
+        ([docs](../TextStyling.html#subscript-superscript-and-fractional-numbers))
+        """
+        return self.__statestack[-1]["sub_lift"]
+
+    @sub_lift.setter
+    def sub_lift(self, v):
+        """
+        Set lift factor for subscript text.
+        ([docs](../TextStyling.html#subscript-superscript-and-fractional-numbers))
+        """
+        self.__statestack[-1]["sub_lift"] = float(v)
+
+    @property
+    def sup_lift(self):
+        """
+        Return lift factor for superscript text.
+        ([docs](../TextStyling.html#subscript-superscript-and-fractional-numbers))
+        """
+        return self.__statestack[-1]["sup_lift"]
+
+    @sup_lift.setter
+    def sup_lift(self, v):
+        """
+        Set lift factor for superscript text.
+        ([docs](../TextStyling.html#subscript-superscript-and-fractional-numbers))
+        """
+        self.__statestack[-1]["sup_lift"] = float(v)
+
+    @property
+    def nom_lift(self):
+        """
+        Return lift factor for nominator text.
+        ([docs](../TextStyling.html#subscript-superscript-and-fractional-numbers))
+        """
+        return self.__statestack[-1]["nom_lift"]
+
+    @nom_lift.setter
+    def nom_lift(self, v):
+        """
+        Set lift factor for nominator text.
+        ([docs](../TextStyling.html#subscript-superscript-and-fractional-numbers))
+        """
+        self.__statestack[-1]["nom_lift"] = float(v)
+
+    @property
+    def denom_lift(self):
+        """
+        Return lift factor for denominator text.
+        ([docs](../TextStyling.html#subscript-superscript-and-fractional-numbers))
+        """
+        return self.__statestack[-1]["denom_lift"]
+
+    @denom_lift.setter
+    def denom_lift(self, v):
+        """
+        Set lift factor for denominator text.
+        ([docs](../TextStyling.html#subscript-superscript-and-fractional-numbers))
+        """
+        self.__statestack[-1]["denom_lift"] = float(v)
+
+    def font_face(self):
+        """
+        Return a `fpdf.fonts.FontFace` instance
+        representing a subset of properties of this GraphicsState.
+        """
+        return FontFace(
+            family=self.font_family,
+            emphasis=TextEmphasis.coerce(self.font_style),
+            size_pt=self.font_size_pt,
+            color=self.text_color
+            if self.text_color != self.DEFAULT_TEXT_COLOR
+            else None,
+            fill_color=self.fill_color
+            if self.fill_color != self.DEFAULT_FILL_COLOR
+            else None,
+        )

@@ -42,15 +42,12 @@ pdf.output("hyperlink.pdf")
 
 ## Hyperlink with write_html ##
 
-An alternative method using [`fpdf.HTMLMixin`](HTML.md):
+An alternative method using [`FPDF.write_html`](HTML.md):
 
 ```python
-from fpdf import FPDF, HTMLMixin
+from fpdf import FPDF
 
-class PDF(FPDF, HTMLMixin):
-    pass
-
-pdf = PDF()
+pdf = FPDF()
 pdf.set_font_size(16)
 pdf.add_page()
 pdf.write_html('<a href="https://github.com/PyFPDF/fpdf2">Link defined as HTML</a>')
@@ -73,8 +70,7 @@ pdf.add_page()
 # Displaying a full-width cell with centered text:
 pdf.cell(w=pdf.epw, txt="Welcome on first page!", align="C")
 pdf.add_page()
-link = pdf.add_link()
-pdf.set_link(link, page=1)
+link = pdf.add_link(page=1)
 pdf.cell(txt="Internal link to first page", border=1, link=link)
 pdf.output("internal_link.pdf")
 ```

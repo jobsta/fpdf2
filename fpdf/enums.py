@@ -1,14 +1,7 @@
-from enum import Enum, IntEnum
+from enum import Enum, IntEnum, Flag, IntFlag
 from sys import intern
 
 from .syntax import Name
-
-
-class DocumentState(IntEnum):
-    UNINITIALIZED = 0
-    READY = 1  # page not started yet
-    GENERATING_PAGE = 2
-    CLOSED = 3  # EOF printed
 
 
 class SignatureFlag(IntEnum):
@@ -23,9 +16,7 @@ class SignatureFlag(IntEnum):
 
 
 class CoerciveEnum(Enum):
-    """
-    An enumeration that provides a helper to coerce strings into enumeration members.
-    """
+    "An enumeration that provides a helper to coerce strings into enumeration members."
 
     @classmethod
     def coerce(cls, value):
@@ -108,6 +99,81 @@ class CoerciveIntEnum(IntEnum):
         raise TypeError(f"{value} cannot convert to a {cls.__name__}")
 
 
+class CoerciveIntFlag(IntFlag):
+    """
+    Enumerated constants that can be combined using the bitwise operators,
+    with a helper to coerce strings and integers into enumeration members.
+    """
+
+    @classmethod
+    def coerce(cls, value):
+        """
+        Attempt to coerce `value` into a member of this enumeration.
+
+        If value is already a member of this enumeration it is returned unchanged.
+        Otherwise, if it is a string, attempt to convert it (case insensitively, by
+        upcasing) as an enumeration name. Otherwise, if it is an int, attempt to
+        convert it as an enumeration value.
+        Otherwise, an exception is raised.
+
+        Args:
+            value (IntEnum, str, int): the value to be coerced.
+
+        Raises:
+            ValueError: if `value` is an int but not a member of this enumeration.
+            ValueError: if `value` is a string but not a member by name.
+            TypeError: if `value`'s type is neither a member of the enumeration nor an
+                int or a string.
+        """
+        if isinstance(value, cls):
+            return value
+
+        if isinstance(value, str):
+            try:
+                return cls[value.upper()]
+            except KeyError:
+                pass
+            try:
+                flags = cls[value[0].upper()]
+                for char in value[1:]:
+                    flags = flags | cls[char.upper()]
+                return flags
+            except KeyError:
+                raise ValueError(f"{value} is not a valid {cls.__name__}") from None
+
+        if isinstance(value, int):
+            return cls(value)
+
+        raise TypeError(f"{value} cannot convert to a {cls.__name__}")
+
+
+class WrapMode(CoerciveEnum):
+    "Defines how to break and wrap lines in multi-line text."
+    WORD = intern("WORD")
+    "Wrap by word"
+
+    CHAR = intern("CHAR")
+    "Wrap by character"
+
+
+class CharVPos(CoerciveEnum):
+    "Defines the vertical position of text relative to the line."
+    SUP = intern("SUP")
+    "Superscript"
+
+    SUB = intern("SUB")
+    "Subscript"
+
+    NOM = intern("NOM")
+    "Nominator of a fraction"
+
+    DENOM = intern("DENOM")
+    "Denominator of a fraction"
+
+    LINE = intern("LINE")
+    "Default line position"
+
+
 class Align(CoerciveEnum):
     "Defines how to render text in a cell"
 
@@ -131,6 +197,102 @@ class Align(CoerciveEnum):
         if value == "":
             return cls.L
         return super(cls, cls).coerce(value)
+
+
+class TextEmphasis(CoerciveIntFlag):
+    """
+    Indicates use of bold / italics / underline.
+
+    This enum values can be combined with & and | operators:
+        style = B | I
+    """
+
+    B = 1
+    "Bold"
+
+    I = 2
+    "Italics"
+
+    U = 4
+    "Underline"
+
+    @property
+    def style(self):
+        return "".join(
+            name for name, value in self.__class__.__members__.items() if value & self
+        )
+
+    @classmethod
+    def coerce(cls, value):
+        if isinstance(value, str):
+            if value == "":
+                return 0
+            if value.upper() == "BOLD":
+                return cls.B
+            if value.upper() == "ITALICS":
+                return cls.I
+            if value.upper() == "UNDERLINE":
+                return cls.U
+        return super(cls, cls).coerce(value)
+
+
+class MethodReturnValue(CoerciveIntFlag):
+    """
+    Defines the return value(s) of a FPDF content-rendering method.
+
+    This enum values can be combined with & and | operators:
+        PAGE_BREAK | LINES
+    """
+
+    PAGE_BREAK = 1
+    "The method will return a boolean indicating if a page break occured"
+
+    LINES = 2
+    "The method will return a multi-lines array of strings, after performing word-wrapping"
+
+    HEIGHT = 4
+    "The method will return how much vertical space was used"
+
+
+class TableBordersLayout(CoerciveEnum):
+    "Defines how to render table borders"
+
+    ALL = intern("ALL")
+    "Draw all table cells borders"
+
+    NONE = intern("NONE")
+    "Draw zero cells border"
+
+    INTERNAL = intern("INTERNAL")
+    "Draw only internal horizontal & vertical borders"
+
+    MINIMAL = intern("MINIMAL")
+    "Draw only the top horizontal border, below the headings, and internal vertical borders"
+
+    HORIZONTAL_LINES = intern("HORIZONTAL_LINES")
+    "Draw only horizontal lines"
+
+    NO_HORIZONTAL_LINES = intern("NO_HORIZONTAL_LINES")
+    "Draw all cells border except horizontal lines, after the headings"
+
+    SINGLE_TOP_LINE = intern("SINGLE_TOP_LINE")
+    "Draw only the top horizontal border, below the headings"
+
+
+class TableCellFillMode(CoerciveEnum):
+    "Defines which table cells to fill"
+
+    NONE = intern("NONE")
+    "Fill zero table cell"
+
+    ALL = intern("ALL")
+    "Fill all table cells"
+
+    ROWS = intern("ROWS")
+    "Fill only table cells in odd rows"
+
+    COLUMNS = intern("COLUMNS")
+    "Fill only table cells in odd columns"
 
 
 class RenderStyle(CoerciveEnum):
@@ -289,9 +451,7 @@ class TextMarkupType(CoerciveEnum):
 
 
 class BlendMode(CoerciveEnum):
-    """
-    An enumeration of the named standard named blend functions supported by PDF.
-    """
+    "An enumeration of the named standard named blend functions supported by PDF."
 
     NORMAL = Name("Normal")
     '''"Selects the source color, ignoring the backdrop."'''
@@ -408,6 +568,14 @@ class AnnotationName(CoerciveEnum):
     INSERT = Name("Insert")
 
 
+class FileAttachmentAnnotationName(CoerciveEnum):
+    "The name of an icon that shall be used in displaying the annotation"
+
+    PUSH_PIN = Name("PushPin")
+    GRAPH_PUSH_PIN = Name("GraphPushPin")
+    PAPERCLIP_TAG = Name("PaperclipTag")
+
+
 class IntersectionRule(CoerciveEnum):
     """
     An enumeration representing the two possible PDF intersection rules.
@@ -494,9 +662,7 @@ class PathPaintRule(CoerciveEnum):
 
 
 class ClippingPathIntersectionRule(CoerciveEnum):
-    """
-    An enumeration of the PDF drawing directives that define a path as a clipping path.
-    """
+    "An enumeration of the PDF drawing directives that define a path as a clipping path."
 
     NONZERO = "W"
     """
@@ -570,9 +736,7 @@ class StrokeJoinStyle(CoerciveIntEnum):
 
 
 class PDFStyleKeys(Enum):
-    """
-    An enumeration of the graphics state parameter dictionary keys.
-    """
+    "An enumeration of the graphics state parameter dictionary keys."
 
     FILL_ALPHA = Name("ca")
     BLEND_MODE = Name("BM")  # shared between stroke and fill
@@ -592,5 +756,80 @@ class Corner(CoerciveEnum):
     BOTTOM_LEFT = "BOTTOM_LEFT"
 
 
-# This enum is only used internally:
-__pdoc__ = {"DocumentState": False}
+class FontDescriptorFlags(Flag):
+    """An enumeration of the flags for the unsigned 32-bit integer entry in the font descriptor specifying various
+    characteristics of the font. Bit positions are numbered from 1 (low-order) to 32 (high-order).
+    """
+
+    FIXED_PITCH = 0x0000001
+    """
+    "All glyphs have the same width (as opposed to proportional or
+    variable-pitch fonts, which have different widths."
+    """
+
+    SYMBOLIC = 0x0000004
+    """
+    "Font contains glyphs outside the Adobe standard Latin character set.
+    This flag and the Nonsymbolic flag shall not both be set or both be clear."
+    """
+
+    ITALIC = 0x0000040
+    """
+    "Glyphs have dominant vertical strokes that are slanted."
+    """
+
+    FORCE_BOLD = 0x0040000
+    """
+    "The flag shall determine whether bold glyphs shall be painted with extra pixels even at very
+    small text sizes by a conforming reader. If set, features of bold glyphs may be thickened at
+    small text sizes."
+    """
+
+
+class AccessPermission(IntFlag):
+    "Permission flags will translate as an integer on the encryption dictionary"
+
+    PRINT_LOW_RES = 0b000000000100
+    "Print the document"
+
+    MODIFY = 0b000000001000
+    "Modify the contents of the document"
+
+    COPY = 0b000000010000
+    "Copy or extract text and graphics from the document"
+
+    ANNOTATION = 0b000000100000
+    "Add or modify text annotations"
+
+    FILL_FORMS = 0b000100000000
+    "Fill in existing interactive form fields"
+
+    COPY_FOR_ACCESSIBILITY = 0b001000000000
+    "Extract text and graphics in support of accessibility to users with disabilities"
+
+    ASSEMBLE = 0b010000000000
+    "Insert, rotate or delete pages and create bookmarks or thumbnail images"
+
+    PRINT_HIGH_RES = 0b100000000000
+    "Print document at the highest resolution"
+
+    @classmethod
+    def all(cls):
+        "All flags enabled"
+        result = 0
+        for permission in list(AccessPermission):
+            result = result | permission
+        return result
+
+    @classmethod
+    def none(cls):
+        "All flags disabled"
+        return 0
+
+
+class EncryptionMethod(Enum):
+    "Algorithm to be used to encrypt the document"
+
+    NO_ENCRYPTION = 0
+    RC4 = 1
+    AES_128 = 2

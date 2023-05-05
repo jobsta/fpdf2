@@ -4,9 +4,7 @@ __author__ = "Mariano Reingart <reingart@gmail.com>"
 __copyright__ = "Copyright (C) 2010 Mariano Reingart"
 __license__ = "LGPL 3.0"
 
-import csv
-import locale
-import warnings
+import csv, locale, warnings
 
 from .errors import FPDFException
 from .fpdf import FPDF
@@ -302,7 +300,8 @@ class FlexTemplate:
             h=element["y2"] - element["y1"],
             txt=str(text),
             align=element.get("align", ""),
-            split_only=True,
+            dry_run=True,
+            output="LINES",
         )
 
     def _text(
@@ -360,7 +359,12 @@ class FlexTemplate:
             )
         else:  # trim to fit exactly the space defined
             text = pdf.multi_cell(
-                w=width, h=height, txt=text, align=align, split_only=True
+                w=width,
+                h=height,
+                txt=text,
+                align=align,
+                dry_run=True,
+                output="LINES",
             )[0]
             pdf.cell(w=width, h=height, txt=text, border=0, align=align, fill=fill)
 
@@ -376,7 +380,7 @@ class FlexTemplate:
         foreground=0,
         **__,
     ):
-        if self.pdf.draw_color.pdf_repr().lower() != _rgb_as_str(foreground):
+        if self.pdf.draw_color.serialize().lower() != _rgb_as_str(foreground):
             self.pdf.set_draw_color(*_rgb(foreground))
         self.pdf.set_line_width(size * scale)
         self.pdf.line(x1, y1, x2, y2)
@@ -395,7 +399,7 @@ class FlexTemplate:
         **__,
     ):
         pdf = self.pdf
-        if pdf.draw_color.pdf_repr().lower() != _rgb_as_str(foreground):
+        if pdf.draw_color.serialize().lower() != _rgb_as_str(foreground):
             pdf.set_draw_color(*_rgb(foreground))
         if background is None:
             style = "D"
@@ -420,7 +424,7 @@ class FlexTemplate:
         **__,
     ):
         pdf = self.pdf
-        if pdf.draw_color.pdf_repr().lower() != _rgb_as_str(foreground):
+        if pdf.draw_color.serialize().lower() != _rgb_as_str(foreground):
             pdf.set_draw_color(*_rgb(foreground))
         if background is None:
             style = "D"
@@ -451,7 +455,7 @@ class FlexTemplate:
     ):
         # pylint: disable=unused-argument
         pdf = self.pdf
-        if pdf.fill_color.pdf_repr().lower() != _rgb_as_str(foreground):
+        if pdf.fill_color.serialize().lower() != _rgb_as_str(foreground):
             pdf.set_fill_color(*_rgb(foreground))
         font = font.lower().strip()
         if font == "interleaved 2of5 nt":
@@ -480,7 +484,7 @@ class FlexTemplate:
                 stacklevel=2,
             )
         pdf = self.pdf
-        if pdf.fill_color.pdf_repr().lower() != _rgb_as_str(foreground):
+        if pdf.fill_color.serialize().lower() != _rgb_as_str(foreground):
             pdf.set_fill_color(*_rgb(foreground))
         h = y2 - y1
         if h <= 0:
@@ -545,35 +549,36 @@ class FlexTemplate:
                 Scale the inserted template by this factor.
         """
         sorted_elements = sorted(self.elements, key=lambda x: x["priority"])
-        for element in sorted_elements:
-            ele = element.copy()  # don't want to modify the callers original
-            ele["text"] = self.texts.get(ele["name"].lower(), ele.get("text", ""))
-            if scale != 1.0:
-                ele["x1"] = ele["x1"] * scale
-                ele["y1"] = ele["y1"] * scale
-                ele["x2"] = ele["x1"] + ((ele["x2"] - element["x1"]) * scale)
-                ele["y2"] = ele["y1"] + ((ele["y2"] - element["y1"]) * scale)
-            if offsetx:
-                ele["x1"] = ele["x1"] + offsetx
-                ele["x2"] = ele["x2"] + offsetx
-            if offsety:
-                ele["y1"] = ele["y1"] + offsety
-                ele["y2"] = ele["y2"] + offsety
-            ele["scale"] = scale
-            handler_name = ele["type"].upper()
-            if rotate:  # don't rotate by 0.0 degrees
-                with self.pdf.rotation(rotate, offsetx, offsety):
+        with self.pdf.local_context():
+            for element in sorted_elements:
+                ele = element.copy()  # don't want to modify the callers original
+                ele["text"] = self.texts.get(ele["name"].lower(), ele.get("text", ""))
+                if scale != 1.0:
+                    ele["x1"] = ele["x1"] * scale
+                    ele["y1"] = ele["y1"] * scale
+                    ele["x2"] = ele["x1"] + ((ele["x2"] - element["x1"]) * scale)
+                    ele["y2"] = ele["y1"] + ((ele["y2"] - element["y1"]) * scale)
+                if offsetx:
+                    ele["x1"] = ele["x1"] + offsetx
+                    ele["x2"] = ele["x2"] + offsetx
+                if offsety:
+                    ele["y1"] = ele["y1"] + offsety
+                    ele["y2"] = ele["y2"] + offsety
+                ele["scale"] = scale
+                handler_name = ele["type"].upper()
+                if rotate:  # don't rotate by 0.0 degrees
+                    with self.pdf.rotation(rotate, offsetx, offsety):
+                        if "rotate" in ele and ele["rotate"]:
+                            with self.pdf.rotation(ele["rotate"], ele["x1"], ele["y1"]):
+                                self.handlers[handler_name](**ele)
+                        else:
+                            self.handlers[handler_name](**ele)
+                else:
                     if "rotate" in ele and ele["rotate"]:
                         with self.pdf.rotation(ele["rotate"], ele["x1"], ele["y1"]):
                             self.handlers[handler_name](**ele)
                     else:
                         self.handlers[handler_name](**ele)
-            else:
-                if "rotate" in ele and ele["rotate"]:
-                    with self.pdf.rotation(ele["rotate"], ele["x1"], ele["y1"]):
-                        self.handlers[handler_name](**ele)
-                else:
-                    self.handlers[handler_name](**ele)
         self.texts = {}  # reset modified entries for the next page
 
 
@@ -646,6 +651,7 @@ class Template(FlexTemplate):
             "creator",
             "keywords",
         ):
+            # nosemgrep: python.lang.security.dangerous-globals-use.dangerous-globals-use
             if not isinstance(locals()[arg], str):
                 raise TypeError(f'Argument "{arg}" must be of type str.')
         pdf = FPDF(format=format, orientation=orientation, unit=unit)

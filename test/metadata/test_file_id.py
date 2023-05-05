@@ -1,19 +1,10 @@
 from pathlib import Path
 
 from fpdf import FPDF
-from test.conftest import assert_pdf_equal, EPOCH
+from test.conftest import assert_pdf_equal
 
 
 HERE = Path(__file__).resolve().parent
-
-
-def test_default_file_id():
-    pdf = FPDF()
-    pdf.creation_date = EPOCH
-    assert (
-        pdf.file_id()
-        == "<A29419ACCA57A4335F99B957670E2C04><A29419ACCA57A4335F99B957670E2C04>"
-    )
 
 
 def test_custom_file_id(tmp_path):

@@ -19,28 +19,30 @@ pdf.cell(txt="hello world")
 pdf.output("hello_world.pdf")
 ```
 
+Go try it **now** online in a Jupyter notebook: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/PyFPDF/fpdf2/blob/master/tutorial/notebook.ipynb) or [![Open In nbviewer](https://img.shields.io/badge/Open_In-nbviewer-blue?logo=jupyter)](https://nbviewer.org/github/PyFPDF/fpdf2/blob/master/tutorial/notebook.ipynb)
+
 ## Main features ##
 
 * Easy to use, with a user-friendly [API](https://pyfpdf.github.io/fpdf2/fpdf/), and easy to extend
-* Python 3.6+ support
+* Python 3.7+ support
 * [Unicode](Unicode.md) (UTF-8) TrueType font subset embedding (Central European, Cyrillic, Greek, Baltic, Thai, Chinese, Japanese, Korean, Hindi and almost any other language in the world)
 * Internal / external [links](Links.md)
 * Embedding images, including transparency and alpha channel, using [Pillow (Python Imaging Library)](https://pillow.readthedocs.io/en/stable/)
 * Arbitrary path drawing and basic [SVG](SVG.md) import
 * Embedding [barcodes](Barcodes.md), [charts & graphs](Maths.md), [emojis, symbols & dingbats](EmojisSymbolsDingbats.md)
-* [Cell / multi-cell / plaintext writing](Text.md), with [automatic page breaks](PageBreaks.md), line break and text justification
+* [Tables](Tables.md), and also [cell / multi-cell / plaintext writing](Text.md), with [automatic page breaks](PageBreaks.md), line break and text justification
 * Choice of measurement unit, page format & margins. Optional page header and footer
 * Basic [conversion from HTML to PDF](HTML.md)
 * A [templating system](Templates.md) to render PDFs in batchs
 * Images & links alternative descriptions, for accessibility
 * Table of contents & [document outline](DocumentOutlineAndTableOfContents.md)
-* [Document signing](Signing.md)
-* [Annotations](Annotations.md), including text highlights
+* [Document encryption](Encryption.md) & [document signing](Signing.md)
+* [Annotations](Annotations.md), including text highlights, and [file attachments](FileAttachments.md)
 * [Presentation mode](Presentations.md) with control over page display duration & transitions
 * Optional basic Markdown-like styling: `**bold**, __italics__`
-* It has very few dependencies: [Pillow](https://pillow.readthedocs.io/en/stable/), [defusedxml](https://pypi.org/project/defusedxml/) & [svg.path](https://pypi.org/project/svg.path/)
+* It has very few dependencies: [Pillow](https://pillow.readthedocs.io/en/stable/), [defusedxml](https://pypi.org/project/defusedxml/), & [fonttools](https://pypi.org/project/fonttools/)
 * Can render [mathematical equations & charts](https://pyfpdf.github.io/fpdf2/Maths.html)
-* Many example scripts available throughout this documentation, including usage examples with [Django](https://www.djangoproject.com/), [Flask](https://flask.palletsprojects.com), [streamlit](https://streamlit.io/), AWS lambdas... : [Usage in web APIs](UsageInWebAPI.md)
+* Many example scripts available throughout this documentation, including usage examples with [Django](https://www.djangoproject.com/), [Flask](https://flask.palletsprojects.com), [FastAPI](https://fastapi.tiangolo.com/), [streamlit](https://streamlit.io/), AWS lambdas... : [Usage in web APIs](UsageInWebAPI.md)
 * Unit tests with `qpdf`-based PDF diffing, and PDF samples validation using 3 different checkers:
 
 [![QPDF logo](qpdf-logo.svg)](https://github.com/qpdf/qpdf)
@@ -54,9 +56,13 @@ pdf.output("hello_world.pdf")
 * [Italian](Tutorial-it.md)
 * [español](Tutorial-es.md)
 * [français](Tutorial-fr.md)
-* [हिंदी](Tutorial-हिंदी.md)
+* [हिंदी](Tutorial-hi.md)
 * [português](Tutorial-pt.md)
 * [Русский](Tutorial-ru.md)
+* [Ελληνικά](Tutorial-gr.md)
+* [עברית](Tutorial-he.md)
+* [简体中文](Tutorial-zh.md)
+* [বাংলা](Tutorial-bn.md)
 
 ## Installation ##
 
@@ -69,11 +75,6 @@ To get the latest, unreleased, development version straight from the development
 
 ```bash
 pip install git+https://github.com/PyFPDF/fpdf2.git@master
-```
-
-`fpdf2` can be installed without any dependency, but it needs [Pillow](https://pypi.org/project/Pillow/) to render images:
-```bash
-pip install --no-dependencies fpdf2
 ```
 
 **Developement**: check the [dedicated documentation page](Development.md).
@@ -108,8 +109,8 @@ or [open a discussion](https://github.com/PyFPDF/fpdf2/discussions).
 ### Related ###
 
 * Looking for alternative libraries? Check out [this detailed list of PDF-related Python libs by Patrick Maupin (`pdfrw` author)](https://github.com/pmaupin/pdfrw#other-libraries).
-  There is also [borb](https://github.com/jorisschellekens/borb), [pikepdf](https://github.com/pikepdf/pikepdf), [WeasyPrint](https://github.com/Kozea/WeasyPrint) & [pydyf](https://pypi.org/project/pydyf/).
-  We have some documentations about combining `fpdf2` with [`borb`](borb.md) & [`pdfrw`](ExistingPDFs.md).
+  There is also [borb](https://github.com/jorisschellekens/borb), [PyPDF2](https://github.com/py-pdf/PyPDF2), [pikepdf](https://github.com/pikepdf/pikepdf), [WeasyPrint](https://github.com/Kozea/WeasyPrint), [pydyf](https://pypi.org/project/pydyf/) and [PyMuPDF](https://pymupdf.readthedocs.io/en/latest/index.html): [features comparison](https://pymupdf.readthedocs.io/en/latest/about.html), [examples](https://github.com/pymupdf/PyMuPDF-Utilities/tree/master/examples#examples), [Jupyter notebooks](https://github.com/pymupdf/PyMuPDF-Utilities/tree/master/jupyter-notebooks).
+  We have some documentations about combining `fpdf2` with [`borb`](CombineWithBorb.md), [`pdfrw`](CombineWithPdfrw.md), & [`PyPDF2`](CombineWithPyPDF2.md).
 * [Create PDFs with Python](https://www.youtube.com/playlist?list=PLjNQtX45f0dR9K2sMJ5ad9wVjqslNBIC0) : a series of tutorial videos by bvalgard
 * [digidigital/Extensions-and-Scripts-for-pyFPDF-fpdf2](https://github.com/digidigital/Extensions-and-Scripts-for-pyFPDF-fpdf2) : scripts ported from PHP to add transpareny to elements of the page or part of an image, allow to write circular text,
    draw pie charts and bar diagrams, embed JavaScript, draw rectangles with rounded corners, draw a star shape,
