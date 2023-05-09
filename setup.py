@@ -11,8 +11,10 @@ if __name__ == "__main__":
     )[0]
     setup(
         name="reportbro-fpdf2",
-        # based on version fpdf2 version 2.7.4
-        version="1.0.0",  # use our own version for reportbro-fpdf2 to avoid confusion new version of fpdf2
+        # based on fpdf2 version 2.7.4
+        # use same major and minor version number as fpdf2 and increase patch number for each following
+        # reportbro-fpdf2 release
+        version="2.7.0",
         description="Simple & fast PDF generation for Python",
         long_description=Path("README.md").read_text(encoding="utf-8"),
         long_description_content_type="text/markdown",
