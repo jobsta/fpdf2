@@ -114,19 +114,21 @@ def get_img_info(filename, img=None, image_filter="AUTO", dims=None):
     if Image is None:
         raise EnvironmentError("Pillow not available - fpdf2 cannot insert images")
 
-    is_pil_img = True
-    jpeg_inverted = False  # flag to check whether a cmyk image is jpeg or not, if set to True the decode array is inverted in output.py
+    close_img = False  # set to True if image IO object was opened here and should be closed
+    # flag to check whether a cmyk image is jpeg or not, if set to True the decode array is inverted in output.py
+    jpeg_inverted = False
     img_raw_data = None
     if not img or isinstance(img, (Path, str)):
         img_raw_data = load_image(filename)
         img = Image.open(img_raw_data)
-        is_pil_img = False
+        close_img = True
     elif not isinstance(img, Image.Image):
         if isinstance(img, bytes):
             img = BytesIO(img)
+            # close image because we created a new BytesIO instance
+            close_img = True
         img_raw_data = img
         img = Image.open(img_raw_data)
-        is_pil_img = False
 
     img_altered = False
     if dims:
@@ -291,7 +293,8 @@ def get_img_info(filename, img=None, image_filter="AUTO", dims=None):
     if img.mode == "1":
         dp = f"/BlackIs1 true /Columns {w} /K -1 /Rows {h}"
 
-    if not is_pil_img:
+    # close image file if IO object was opened in this function
+    if close_img:
         img.close()
 
     info.update(
