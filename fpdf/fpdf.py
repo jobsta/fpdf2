@@ -3689,12 +3689,12 @@ class FPDF(GraphicsStateMixin):
 
             if self.is_ttf_font:
                 char = ord(c)
-                if len(cw) > char:
-                    char_w = cw[char]
-                elif self.current_font['desc']['MissingWidth']:
-                    char_w = self.current_font['desc']['MissingWidth']
-                else:
-                    char_w = 500
+                char_w = cw.get(char)
+                if char_w is None:
+                    if self.current_font['desc'].missing_width:
+                        char_w = self.current_font['desc'].missing_width
+                    else:
+                        char_w = 500
             else:
                 if ord(c) < 128:
                     char_w = cw.get(c, 0)
