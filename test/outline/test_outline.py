@@ -48,8 +48,10 @@ def test_simple_outline(tmp_path):
     pdf.start_section("Subtitle 1.1", level=1)
     p(
         pdf,
-        "Lorem ipsum dolor sit amet, consectetur adipiscing elit,"
-        " sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
+        (
+            "Lorem ipsum dolor sit amet, consectetur adipiscing elit,"
+            " sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
+        ),
     )
     pdf.add_page()
     pdf.start_section("Subtitle 1.2", level=1)
@@ -78,14 +80,13 @@ def p(pdf, text, **kwargs):
     pdf.multi_cell(
         w=pdf.epw,
         h=pdf.font_size,
-        txt=text,
+        text=text,
         new_x="LMARGIN",
         new_y="NEXT",
         **kwargs,
     )
 
 
-# pylint: disable=unused-argument
 def render_toc(pdf, outline):
     pdf.y += 50
     pdf.set_font("Helvetica", size=16)
@@ -162,8 +163,10 @@ def test_2_pages_outline(tmp_path):
         pdf.start_section(f"Title {i}")
         p(
             pdf,
-            "Lorem ipsum dolor sit amet, consectetur adipiscing elit,"
-            " sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
+            (
+                "Lorem ipsum dolor sit amet, consectetur adipiscing elit,"
+                " sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
+            ),
         )
     assert_pdf_equal(pdf, HERE / "2_pages_outline.pdf", tmp_path)
 
@@ -175,7 +178,7 @@ def test_toc_with_nb_and_footer(tmp_path):  # issue-548
             self.set_font(style="", size=12)
             for section in outline:
                 self.ln()
-                self.cell(txt=section.name)
+                self.cell(text=section.name)
 
         def footer(self):
             self.set_y(-15)
@@ -189,7 +192,7 @@ def test_toc_with_nb_and_footer(tmp_path):  # issue-548
     for i in range(1, 80):
         pdf.set_font(style="B")
         pdf.start_section(f"Section {i}")
-        pdf.cell(txt=f"Section {i}")
+        pdf.cell(text=f"Section {i}")
         pdf.ln()
 
     assert_pdf_equal(pdf, HERE / "toc_with_nb_and_footer.pdf", tmp_path)

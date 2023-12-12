@@ -1,3 +1,11 @@
+"""
+Mixin class for managing a stack of graphics state variables.
+
+The contents of this module are internal to fpdf2, and not part of the public API.
+They may change at any time without prior warning or any deprecation period,
+in non-backward-compatible ways.
+"""
+
 from .drawing import DeviceGray
 from .enums import CharVPos, TextEmphasis, TextMode
 from .fonts import FontFace
@@ -44,15 +52,19 @@ class GraphicsStateMixin:
                 sup_lift=0.4,
                 nom_lift=0.2,
                 denom_lift=0.0,
+                text_shaping=None,
             ),
         ]
         super().__init__(*args, **kwargs)
 
-    def _push_local_stack(self):
-        self.__statestack.append(self.__statestack[-1].copy())
+    def _push_local_stack(self, new=None):
+        if new:
+            self.__statestack.append(new)
+        else:
+            self.__statestack.append(self.__statestack[-1].copy())
 
     def _pop_local_stack(self):
-        del self.__statestack[-1]
+        return self.__statestack.pop()
 
     def _get_current_graphics_state(self):
         return self.__statestack[-1].copy()
@@ -312,6 +324,14 @@ class GraphicsStateMixin:
         ([docs](../TextStyling.html#subscript-superscript-and-fractional-numbers))
         """
         self.__statestack[-1]["denom_lift"] = float(v)
+
+    @property
+    def text_shaping(self):
+        return self.__statestack[-1]["text_shaping"]
+
+    @text_shaping.setter
+    def text_shaping(self, v):
+        self.__statestack[-1]["text_shaping"] = v
 
     def font_face(self):
         """

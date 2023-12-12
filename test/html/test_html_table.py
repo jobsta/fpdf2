@@ -8,6 +8,7 @@ from test.table.test_table import MULTILINE_TABLE_DATA
 
 
 HERE = Path(__file__).resolve().parent
+ROOT = HERE.parent.parent
 
 
 def test_html_table_simple(tmp_path):
@@ -58,7 +59,7 @@ def test_html_table_th_inside_tr_issue_137(tmp_path):
     </tr>
 </table>"""
     )
-    assert_pdf_equal(pdf, HERE / "html_table_line_separators_issue_137.pdf", tmp_path)
+    assert_pdf_equal(pdf, HERE / "html_table_th_inside_tr_issue_137.pdf", tmp_path)
 
 
 def test_html_table_with_border(tmp_path):
@@ -84,13 +85,15 @@ def test_html_table_with_img(caplog, tmp_path):
         """<table>
         <tr>
             <td width="50%">
-                <img src="test/image/png_images/affc57dfffa5ec448a0795738d456018.png" height="235" width="435"/>
+                <img src="{}/test/image/png_images/affc57dfffa5ec448a0795738d456018.png" height="235" width="435"/>
             </td>
             <td width="50%">
-                <img src="test/image/image_types/insert_images_insert_png.png" height="162" width="154"/>
+                <img src="{}/test/image/image_types/insert_images_insert_png.png" height="162" width="154"/>
             </td>
         </tr>
-    </table>"""
+    </table>""".replace(
+            "{}", str(ROOT)
+        )
     )
     assert_pdf_equal(pdf, HERE / "html_table_with_img.pdf", tmp_path)
     assert 'Ignoring unsupported "width" / "height" set on <img> element' in caplog.text
@@ -103,16 +106,20 @@ def test_html_table_with_img_without_explicit_dimensions(tmp_path):
         """<table>
         <tr>
             <td width="50%">
-                <img src="test/image/png_images/affc57dfffa5ec448a0795738d456018.png"/>
+                <img src="{}/test/image/png_images/affc57dfffa5ec448a0795738d456018.png"/>
             </td>
             <td width="50%">
-                <img src="test/image/image_types/insert_images_insert_png.png"/>
+                <img src="{}/test/image/image_types/insert_images_insert_png.png"/>
             </td>
         </tr>
-    </table>"""
+    </table>""".replace(
+            "{}", str(ROOT)
+        )
     )
     assert_pdf_equal(
-        pdf, HERE / "html_table_with_img_without_explicit_dimensions.pdf", tmp_path
+        pdf,
+        HERE / "html_table_with_img_without_explicit_dimensions.pdf",
+        tmp_path,
     )
 
 
@@ -125,17 +132,21 @@ def test_html_table_with_imgs_captions_and_colspan(caplog, tmp_path):
             <td colspan="2" align="center"><b>Side by side centered pictures and captions</b></td>
         </tr>
         <tr>
-            <td width="50%" align="center"><img src="docs/fpdf2-logo.png"/></td>
-            <td width="50%" align="center"><img src="docs/fpdf2-logo.png"/></td>
+            <td width="50%" align="center"><img src="{}/docs/fpdf2-logo.png"/></td>
+            <td width="50%" align="center"><img src="{}/docs/fpdf2-logo.png"/></td>
         </tr>
         <tr>
             <td width="50%" align="center">left caption</td>
             <td width="50%" align="center">right caption</td>
         </tr>
-    </table>"""
+    </table>""".replace(
+            "{}", str(ROOT)
+        )
     )
     assert_pdf_equal(
-        pdf, HERE / "html_table_with_imgs_captions_and_colspan.pdf", tmp_path
+        pdf,
+        HERE / "html_table_with_imgs_captions_and_colspan.pdf",
+        tmp_path,
     )
     assert (
         'Ignoring width="50%" specified on a <td> that is not in the first <tr>'
@@ -230,12 +241,13 @@ def test_html_table_with_multiline_cells_and_split_over_page(tmp_path):
     # pylint: disable=consider-using-join
     for cell_text in MULTILINE_TABLE_DATA[0]:
         html += f"\n<th>{cell_text}</th>"
-    html += "\n</tr></thead><tbody><tr>"
+    html += "\n</tr></thead><tbody>"
     for data_row in MULTILINE_TABLE_DATA[1:-1] + MULTILINE_TABLE_DATA[1:]:
+        html += "\n<tr>"
         for cell_text in data_row:
             html += f"\n<td>{cell_text}</td>"
-        html += "\n</tr><tr>"
-    html += "\n</tr></tbody></table>"
+        html += "</tr>"
+    html += "\n</tbody></table>"
     pdf.write_html(html)
     assert_pdf_equal(
         pdf, HERE / "html_table_with_multiline_cells_and_split_over_page.pdf", tmp_path
@@ -277,3 +289,69 @@ def test_html_table_invalid(caplog):
         pdf.write_html("<tr></tr>")
     assert str(error.value) == "Invalid HTML: <tr> used outside any <table>"
     assert caplog.text == ""
+
+
+def test_html_table_with_nested_tags():  # issue 845
+    pdf = FPDF()
+    pdf.set_font_size(24)
+    pdf.add_page()
+    with pytest.raises(NotImplementedError):
+        pdf.write_html(
+            """<table><tr>
+            <th>LEFT</th>
+            <th>RIGHT</th>
+        </tr><tr>
+            <td><font size=7>This is supported</font></td>
+            <td>This <font size=20>is not</font> <b>supported</b></td>
+        </tr></table>"""
+        )
+
+
+def test_html_table_with_font_tags_used_to_set_text_color(tmp_path):  # issue 1013
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=8)
+    pdf.write_html(
+        """<table>
+    <thead>
+        <tr bgcolor="#711C45">
+            <th width="25%"><font color="#711C45">Mark</font></th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr bgcolor="#E4E4E4">
+            <td align="center"><font color="#E4E4E4">less than 2</font></td>
+        </tr>
+    </tbody>
+    </table>"""
+    )
+    assert_pdf_equal(
+        pdf,
+        HERE / "html_table_with_font_tags_used_to_set_text_color.pdf",
+        tmp_path,
+    )
+
+
+def test_html_table_with_data_that_contains_entity_names(tmp_path):  # issue 1010
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=8)
+    pdf.write_html(
+        """<table>
+    <thead>
+        <tr>
+            <th>Value</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Pi &lt; 22 &divide; 7</td>
+        </tr>
+    </tbody>
+    </table>"""
+    )
+    assert_pdf_equal(
+        pdf,
+        HERE / "html_table_with_data_that_contains_entity_names.pdf",
+        tmp_path,
+    )

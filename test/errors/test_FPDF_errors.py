@@ -1,5 +1,4 @@
 from pathlib import Path
-from test.conftest import assert_pdf_equal
 
 import fpdf
 import pytest
@@ -24,7 +23,7 @@ def test_encoding_exception():
     pdf.add_page()
     pdf.set_font("Helvetica", size=15)
     with pytest.raises(FPDFUnicodeEncodingException) as error:
-        pdf.cell(txt="Joséō")
+        pdf.cell(text="Joséō")
         # This should through an error since Helvetica is a latin-1 encoder and the ō is out of range.
     msg = (
         'Character "ō" at index 4 in text is outside the range of characters supported by the font '
@@ -73,7 +72,7 @@ def test_units():
 
 def test_doc_option_only_core_fonts_encoding():
     pdf = fpdf.FPDF()
-    with pytest.warns(DeprecationWarning):
+    with pytest.warns(DeprecationWarning) as record:
         pdf.set_doc_option("core_fonts_encoding", 4)
         assert pdf.core_fonts_encoding == 4
 
@@ -83,12 +82,15 @@ def test_doc_option_only_core_fonts_encoding():
         msg = 'Unknown document option "not core_fonts_encoding"'
         assert str(e.value) == msg
 
+    for r in record:
+        assert r.filename == __file__
+
 
 def test_adding_content_after_closing():
     pdf = fpdf.FPDF()
     pdf.set_font("helvetica", size=24)
     pdf.add_page()
-    pdf.cell(w=pdf.epw, txt="Hello fpdf2!", align="C")
+    pdf.cell(w=pdf.epw, text="Hello fpdf2!", align="C")
     pdf.output()
     with pytest.raises(FPDFException) as error:
         pdf.add_page()
@@ -97,17 +99,11 @@ def test_adding_content_after_closing():
         == "A page cannot be added on a closed document, after calling output()"
     )
     with pytest.raises(FPDFException) as error:
-        pdf.cell(w=pdf.epw, txt="Hello again!", align="C")
+        pdf.cell(w=pdf.epw, text="Hello again!", align="C")
     assert (
         str(error.value)
         == "Content cannot be added on a finalized document, after calling output()"
     )
-
-
-def test_repeated_calls_to_output(tmp_path):
-    pdf = fpdf.FPDF()
-    assert_pdf_equal(pdf, HERE / "repeated_calls_to_output.pdf", tmp_path)
-    assert_pdf_equal(pdf, HERE / "repeated_calls_to_output.pdf", tmp_path)
 
 
 def test_unsupported_image_filter_error():

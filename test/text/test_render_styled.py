@@ -1,3 +1,4 @@
+# pylint: disable=redefined-loop-name
 from pathlib import Path
 
 import pytest
@@ -77,23 +78,23 @@ def test_render_styled_newpos(tmp_path):
         newy = YPos.coerce(item[3])
         # pylint: disable=protected-access
         frags = doc._preload_font_styles(s, False)
-        justify = align == Align.J
-        mlb = MultiLineBreak(frags, justify=justify)
-        line = mlb.get_line_of_given_width(twidth * 1000 / doc.font_size)
-        # we need to manually rebuild our TextLine in order to force
-        # justified alignment on a single line.
-        line = TextLine(
-            fragments=line.fragments,
-            text_width=line.text_width,
-            number_of_spaces=line.number_of_spaces,
-            justify=align == Align.J,
-            trailing_nl=False,
-        )
+        mlb = MultiLineBreak(frags, twidth, [1, 1], align=align)
+        line = mlb.get_line()
+        if align == Align.J:
+            # We need to manually rebuild our TextLine in order to force
+            # justified alignment on a single line.
+            line = TextLine(
+                fragments=line.fragments,
+                text_width=line.text_width,
+                number_of_spaces=line.number_of_spaces,
+                align=Align.J,
+                height=0,
+                max_width=line.max_width,
+                trailing_nl=False,
+            )
         doc._render_styled_text_line(
             line,
-            twidth,
             border=1,
-            align=align,
             new_x=newx,
             new_y=newy,
         )
@@ -133,7 +134,7 @@ def test_cell_newpos(tmp_path):
         newy = item[3]
         doc.cell(
             twidth,
-            txt=s,
+            text=s,
             border=1,
             align=align,
             new_x=newx,
@@ -176,7 +177,7 @@ def test_cell_newpos_stretched(tmp_path):
         newy = item[3]
         doc.cell(
             twidth,
-            txt=s,
+            text=s,
             border=1,
             align=align,
             new_x=newx,
@@ -219,7 +220,7 @@ def test_cell_newpos_charspaced(tmp_path):
         newy = item[3]
         doc.cell(
             twidth,
-            txt=s,
+            text=s,
             border=1,
             align=align,
             new_x=newx,
@@ -263,7 +264,7 @@ def test_cell_newpos_combined(tmp_path):
         newy = item[3]
         doc.cell(
             twidth,
-            txt=s,
+            text=s,
             border=1,
             align=align,
             new_x=newx,
@@ -304,7 +305,7 @@ def test_multi_cell_newpos(tmp_path):
         newy = item[3]
         doc.multi_cell(
             twidth,
-            txt=s + " xxxxxxxxxxxxxxx",  # force auto break
+            text=s + " xxxxxxxxxxxxxxx",  # force auto break
             border=1,
             align=align,
             new_x=newx,
@@ -346,7 +347,7 @@ def test_multi_cell_newpos_stretched(tmp_path):
         newy = item[3]
         doc.multi_cell(
             twidth,
-            txt=s + " xxxxxxxxxxxxxxx",  # force auto break
+            text=s + " xxxxxxxxxxxxxxx",  # force auto break
             border=1,
             align=align,
             new_x=newx,
@@ -387,7 +388,7 @@ def test_multi_cell_newpos_charspaced(tmp_path):
         newy = item[3]
         doc.multi_cell(
             twidth,
-            txt=s + " xxxxxxxxxxxx",  # force auto break
+            text=s + " xxxxxxxxxxxx",  # force auto break
             border=1,
             align=align,
             new_x=newx,
@@ -429,7 +430,7 @@ def test_multi_cell_newpos_combined(tmp_path):
         newy = item[3]
         doc.multi_cell(
             twidth,
-            txt=s + " xxxxxxxxxxxx",  # force auto break
+            text=s + " xxxxxxxxxxxx",  # force auto break
             border=1,
             align=align,
             new_x=newx,
@@ -491,14 +492,18 @@ def test_cell_lnpos(tmp_path):
         align = item[1]
         if align == "J":
             continue
-        with pytest.warns(DeprecationWarning):
+        with pytest.warns(DeprecationWarning) as record:
             doc.cell(
                 twidth,
-                txt=s,
+                text=s,
                 border=1,
                 align=align,
                 ln=ln,
             )
+
+        assert len(record) == 1
+        assert record[0].filename == __file__
+
         # mark the new position in the file with crosshairs for verification
         with doc.rotation(i * -15, doc.x, doc.y):
             doc.circle(doc.x - 3, doc.y - 3, 6)
@@ -531,14 +536,17 @@ def test_multi_cell_ln_newpos(tmp_path):
         s = item[0]
         align = item[1]
         ln = item[2]
-        with pytest.warns(DeprecationWarning):
+        with pytest.warns(DeprecationWarning) as record:
             doc.multi_cell(
                 twidth,
-                txt=s + " xxxxxxxxxxxxxxxxxxxx",  # force auto break
+                text=s + " xxxxxxxxxxxxxxxxxxxx",  # force auto break
                 border=1,
                 align=align,
                 ln=ln,
             )
+        assert len(record) == 1
+        assert record[0].filename == __file__
+
         # mark the new position in the file with crosshairs for verification
         with doc.rotation(i * -15, doc.x, doc.y):
             doc.circle(doc.x - 3, doc.y - 3, 6)

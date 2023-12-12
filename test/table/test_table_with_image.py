@@ -39,6 +39,43 @@ MULTILINE_TABLE_DATA = (
 )
 
 
+def test_table_with_image_border_overlap(tmp_path):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Times", size=16)
+    with pdf.table() as table:
+        row = table.row()
+        row.cell(img=IMG_DIR / "png_indexed/flower1.png", img_fill_width=True)
+        row.cell("Other field")
+    assert_pdf_equal(pdf, HERE / "table_with_image_border_overlap.pdf", tmp_path)
+
+
+def test_table_with_image_mixed_rows_and_alignment(tmp_path):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Times", size=16)
+    with pdf.table() as table:
+        for i, data_row in enumerate(MULTILINE_TABLE_DATA[:2]):
+            row = table.row()
+            for j, datum in enumerate(data_row):
+                if j == 1 and i > 0:
+                    row.cell(img=datum, img_fill_width=True)
+                else:
+                    row.cell(datum)
+
+        row = table.row()
+        row.cell("Where do I align vertically?")
+        row.cell(
+            "This is a cell with multiple lines\nThis is a cell with multiple lines\nThis is a cell with multiple lines\nThis is a cell with multiple lines\nThis is a cell with multiple lines\nThis is a cell with multiple lines\n"
+        )
+
+    assert_pdf_equal(
+        pdf,
+        HERE / "table_with_multiline_cells_and_images_mixed.pdf",
+        tmp_path,
+    )
+
+
 def test_table_with_images(tmp_path):
     pdf = FPDF()
     pdf.add_page()
@@ -109,3 +146,41 @@ def test_table_with_qrcode(tmp_path):  # issue 771
         row.cell(img=qrCodeGenerated.get_image(), img_fill_width=True)
         row.cell("Other field")
     assert_pdf_equal(pdf, HERE / "table_with_qrcode.pdf", tmp_path)
+
+
+def test_table_with_page_break_over_image(tmp_path):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Times", size=16)
+    pdf.y = 220
+    with pdf.table() as table:
+        for i, data_row in enumerate(TABLE_DATA[:2]):
+            row = table.row()
+            for j, datum in enumerate(data_row):
+                if j == 2 and i > 0:
+                    row.cell(img=datum, img_fill_width=True)
+                else:
+                    row.cell(datum)
+    assert_pdf_equal(pdf, HERE / "table_with_page_break_over_image.pdf", tmp_path)
+
+
+def test_table_with_links(tmp_path):
+    pdf = FPDF()
+    pdf.set_font("Times", size=16)
+    pdf.add_page()
+    pdf.y = 100
+    pdf.cell(text="Page 1", center=True)
+    pdf.add_page()
+    with pdf.table() as table:
+        for i, data_row in enumerate(TABLE_DATA):
+            row = table.row()
+            for j, datum in enumerate(data_row):
+                if j == 2 and i > 0:
+                    row.cell(
+                        img=datum,
+                        img_fill_width=True,
+                        link="https://py-pdf.github.io/fpdf2/",
+                    )
+                else:
+                    row.cell(datum, link=pdf.add_link(page=1))
+    assert_pdf_equal(pdf, HERE / "table_with_links.pdf", tmp_path)

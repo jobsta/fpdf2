@@ -39,9 +39,9 @@ from fpdf import FPDF, HTML2FPDF
 
 class CustomHTML2FPDF(HTML2FPDF):
     def render_toc(self, pdf, outline):
-        pdf.cell(txt='Table of contents:', new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(text='Table of contents:', new_x="LMARGIN", new_y="NEXT")
         for section in outline:
-            pdf.cell(txt=f'* {section.name} (page {section.page_number})', new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(text=f'* {section.name} (page {section.page_number})', new_x="LMARGIN", new_y="NEXT")
 
 class PDF(FPDF):
     HTML2FPDF_CLASS = CustomHTML2FPDF
@@ -63,7 +63,7 @@ pdf.output("html_toc.pdf")
 
 The regression tests are a good place to find code samples.
 
-For example, the [`test_simple_outline`](https://github.com/PyFPDF/fpdf2/blob/master/test/outline/test_outline.py) test function generates the PDF document [simple_outline.pdf](https://github.com/PyFPDF/fpdf2/blob/master/test/outline/simple_outline.pdf).
+For example, the [`test_simple_outline`](https://github.com/py-pdf/fpdf2/blob/master/test/outline/test_outline.py) test function generates the PDF document [simple_outline.pdf](https://github.com/py-pdf/fpdf2/blob/master/test/outline/simple_outline.pdf).
 
-Similarly, [`test_html_toc`](https://github.com/PyFPDF/fpdf2/blob/master/test/outline/test_outline_html.py)
-generates [test_html_toc.pdf](https://github.com/PyFPDF/fpdf2/blob/5453422bf560a909229c82e53eb516e44fea1817/test/outline/test_html_toc.pdf).
+Similarly, [`test_html_toc`](https://github.com/py-pdf/fpdf2/blob/master/test/outline/test_outline_html.py)
+generates [test_html_toc.pdf](https://github.com/py-pdf/fpdf2/blob/5453422bf560a909229c82e53eb516e44fea1817/test/outline/test_html_toc.pdf).

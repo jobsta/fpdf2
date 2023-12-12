@@ -12,7 +12,7 @@ jobs:
   test:
     strategy:
       matrix:
-        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11']
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
         platform: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.platform }}
     steps:
@@ -24,11 +24,11 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install system dependencies ⚙️
         if: matrix.platform == 'ubuntu-latest'
-        run: sudo apt-get update && sudo apt-get install ghostscript libjpeg-dev
+        run: sudo apt-get update --allow-releaseinfo-change && sudo apt-get install ghostscript libjpeg-dev
       - name: Install qpdf ⚙️
         if: matrix.platform == 'ubuntu-latest' && matrix.python-version != '3.9'
         # We run the unit tests WITHOUT qpdf for a single parallel execution / Python version:
-        run: sudo apt-get update && sudo apt-get install qpdf
+        run: sudo apt-get update --allow-releaseinfo-change && sudo apt-get install qpdf
       - name: Install Python dependencies ⚙️
         run: |
           python -m pip install --upgrade pip setuptools wheel
@@ -38,7 +38,7 @@ jobs:
         run: |
           pylint fpdf test tutorial/tuto*.py
           bandit -c .banditrc.yml -r contributors/ fpdf/ tutorial/
-          semgrep scan --config auto --lang=py --error --strict --exclude-rule=python.lang.security.insecure-hash-function.insecure-hash-function fpdf
+          semgrep scan --config auto --error --strict --exclude-rule=python.lang.security.insecure-hash-function.insecure-hash-function fpdf
       - name: Ensure code has been autoformatted with black 🖌️
         if: matrix.python-version == '3.10' && matrix.platform == 'ubuntu-latest'
         run: black --check .
@@ -47,14 +47,15 @@ jobs:
         run: |
           # Using qpdf
           find . -name '*.pdf' | xargs -n 1 qpdf --check --password=fpdf2
+          export PYTHONPATH=$PWD
           # Using Datalogics PDF Checker:
           scripts/install-pdfchecker.sh
-          find . -name '*.pdf' | xargs -n 1 scripts/pdfchecker.py
-          scripts/pdfchecker.py  # printing aggregated report
+          scripts/pdfchecker.py --process-all-test-pdf-files
+          scripts/pdfchecker.py --print-aggregated-report
           # Using VeraPDF:
           scripts/install-verapdf.sh
-          find . -name '*.pdf' | xargs -n 1 scripts/verapdf.py
-          scripts/verapdf.py  # printing aggregated report
+          scripts/verapdf.py --process-all-test-pdf-files
+          scripts/verapdf.py --print-aggregated-report
       - name: Running tests ☑
         env:
           CHECK_EXEC_TIME: ${{ matrix.python-version == '3.9' && 'test-enabled' || '' }}
@@ -79,8 +80,8 @@ jobs:
           sed -i "s/author:.*/author: v$(python setup.py -V 2>/dev/null)/" mkdocs.yml
           cp tutorial/notebook.ipynb docs/
           mkdocs build
-          pdoc --html -o public/ fpdf --config "git_link_template='https://github.com/PyFPDF/fpdf2/blob/{commit}/{path}#L{start_line}-L{end_line}'"
-          cd contributors/ && PYTHONUNBUFFERED=1 ./build_contributors_html_page.py PyFPDF/fpdf2
+          pdoc --html -o public/ fpdf --config "git_link_template='https://github.com/py-pdf/fpdf2/blob/{commit}/{path}#L{start_line}-L{end_line}'"
+          cd contributors/ && PYTHONUNBUFFERED=1 ./build_contributors_html_page.py py-pdf/fpdf2
           cp -t ../public/ contributors.html contributors-map-small.png
       - name: Deploy documentation 🚀
         # GitHub Pages deployment should not be done for all Python versions,

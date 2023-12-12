@@ -6,6 +6,7 @@ __license__ = "LGPL 3.0"
 
 import csv, locale, warnings
 
+from .deprecation import get_stack_level
 from .errors import FPDFException
 from .fpdf import FPDF
 
@@ -31,13 +32,9 @@ class FlexTemplate:
 
     def __init__(self, pdf, elements=None):
         """
-        Arguments:
+        Arguments: pdf (fpdf.FPDF() instance): All content will be added to this object.
 
-            pdf (fpdf.FPDF() instance):
-                All content will be added to this object.
-
-            elements (list of dicts):
-                A template definition in a list of dicts.
+            elements (list of dicts): A template definition in a list of dicts.
                 If you omit this, then you need to call either load_elements()
                 or parse_csv() before doing anything else.
         """
@@ -65,8 +62,7 @@ class FlexTemplate:
 
         Arguments:
 
-            elements (list of dicts):
-                A template definition in a list of dicts
+            elements (list of dicts): A template definition in a list of dicts
         """
         key_config = {
             # key: type
@@ -123,7 +119,6 @@ class FlexTemplate:
                     e["size"] = e["w"]
             for k, t in key_config.items():
                 if k in e and not isinstance(e[k], t):
-                    # pylint: disable=no-member
                     ttype = (
                         t.__name__
                         if isinstance(t, type)
@@ -158,21 +153,16 @@ class FlexTemplate:
 
         Arguments:
 
-            infile (string):
-                The filename of the CSV file.
+            infile (string): The filename of the CSV file.
 
-            delimiter (single character):
-                The character that seperates the fields in the CSV file:
+            delimiter (single character): The character that seperates the fields in the CSV file:
                 Usually a comma, semicolon, or tab.
 
-            decimal_sep (single character):
-                The decimal separator used in the file.
+            decimal_sep (single character): The decimal separator used in the file.
                 Usually either a point or a comma.
 
-            encoding (string):
-                The character encoding of the file.
+            encoding (string): The character encoding of the file.
                 Default is the system default encoding.
-
         """
 
         def _varsep_float(s, default="0"):
@@ -269,11 +259,9 @@ class FlexTemplate:
 
         Arguments:
 
-            text (string):
-                The input text string.
+            text (string): The input text string.
 
-            element_name (string):
-                The name of the template element to fit the text inside.
+            element_name (string): The name of the template element to fit the text inside.
 
         Returns:
             A list of substrings, each of which will fit into the element width
@@ -298,7 +286,7 @@ class FlexTemplate:
         return self.splitting_pdf.multi_cell(
             w=element["x2"] - element["x1"],
             h=element["y2"] - element["y1"],
-            txt=str(text),
+            text=str(text),
             align=element.get("align", ""),
             dry_run=True,
             output="LINES",
@@ -352,21 +340,21 @@ class FlexTemplate:
         pdf.set_xy(x1, y1)
         width, height = x2 - x1, y2 - y1
         if multiline is None:  # write without wrapping/trimming (default)
-            pdf.cell(w=width, h=height, txt=text, border=0, align=align, fill=fill)
+            pdf.cell(w=width, h=height, text=text, border=0, align=align, fill=fill)
         elif multiline:  # automatic word - warp
             pdf.multi_cell(
-                w=width, h=height, txt=text, border=0, align=align, fill=fill
+                w=width, h=height, text=text, border=0, align=align, fill=fill
             )
         else:  # trim to fit exactly the space defined
             text = pdf.multi_cell(
                 w=width,
                 h=height,
-                txt=text,
+                text=text,
                 align=align,
                 dry_run=True,
                 output="LINES",
             )[0]
-            pdf.cell(w=width, h=height, txt=text, border=0, align=align, fill=fill)
+            pdf.cell(w=width, h=height, text=text, border=0, align=align, fill=fill)
 
     def _line(
         self,
@@ -479,9 +467,12 @@ class FlexTemplate:
     ):
         if x is not None or y is not None or w is not None or h is not None:
             warnings.warn(
-                "code39 arguments x/y/w/h are deprecated, please use x1/y1/y2/size instead",
+                (
+                    "code39 arguments x/y/w/h are deprecated since v2.4.4,"
+                    " please use x1/y1/y2/size instead"
+                ),
                 DeprecationWarning,
-                stacklevel=2,
+                stacklevel=get_stack_level(),
             )
         pdf = self.pdf
         if pdf.fill_color.serialize().lower() != _rgb_as_str(foreground):
@@ -539,14 +530,11 @@ class FlexTemplate:
 
         Arguments:
 
-            offsetx, offsety (float):
-                Place the template to move its origin to the given coordinates.
+            offsetx, offsety (float): Place the template to move its origin to the given coordinates.
 
-            rotate (float):
-                Rotate the inserted template around its (offset) origin.
+            rotate (float): Rotate the inserted template around its (offset) origin.
 
-            scale (float):
-                Scale the inserted template by this factor.
+            scale (float): Scale the inserted template by this factor.
         """
         sorted_elements = sorted(self.elements, key=lambda x: x["priority"])
         with self.pdf.local_context():
@@ -591,7 +579,6 @@ class Template(FlexTemplate):
 
     # Disabling this check due to the "format" parameter below:
     # pylint: disable=redefined-builtin
-    # pylint: disable=unused-argument
     def __init__(
         self,
         infile=None,
@@ -608,23 +595,18 @@ class Template(FlexTemplate):
         """
         Arguments:
 
-            infile (str):
-                [**DEPRECATED since 2.2.0**] unused, will be removed in a later version
+            infile (str): [**DEPRECATED since 2.2.0**] unused, will be removed in a later version
 
-            elements (list of dicts):
-                A template definition in a list of dicts.
+            elements (list of dicts): A template definition in a list of dicts.
                 If you omit this, then you need to call either load_elements()
                 or parse_csv() before doing anything else.
 
-            format (str):
-                The page format of the document (eg. "A4" or "letter").
+            format (str): The page format of the document (eg. "A4" or "letter").
 
-            orientation (str):
-                The orientation of the document.
+            orientation (str): The orientation of the document.
                 Possible values are "portrait"/"P" or "landscape"/"L"
 
-            unit (str):
-                The units used in the template definition.
+            unit (str): The units used in the template definition.
                 One of "mm", "cm", "in", "pt", or a number for points per unit.
 
             title (str): The title of the document.
@@ -637,9 +619,9 @@ class Template(FlexTemplate):
         """
         if infile:
             warnings.warn(
-                '"infile" is deprecated, unused and will soon be removed',
+                '"infile" is deprecated since v2.2.0, unused and will soon be removed',
                 DeprecationWarning,
-                stacklevel=2,
+                stacklevel=get_stack_level(),
             )
         for arg in (
             "format",
@@ -675,18 +657,16 @@ class Template(FlexTemplate):
 
         Arguments:
 
-            outfile (str):
-                If given, the PDF file will be written to this file name.
+            outfile (str): If given, the PDF file will be written to this file name.
                 Alternatively, the `.pdf.output()` method can be manually called.
 
-            dest (str):
-                [**DEPRECATED since 2.2.0**] unused, will be removed in a later version.
+            dest (str): [**DEPRECATED since 2.2.0**] unused, will be removed in a later version.
         """
         if dest:
             warnings.warn(
-                '"dest" is deprecated, unused and will soon be removed',
+                '"dest" is deprecated since v2.2.0, unused and will soon be removed',
                 DeprecationWarning,
-                stacklevel=2,
+                stacklevel=get_stack_level(),
             )
         self.pdf.set_font("helvetica", "B", 16)
         self.pdf.set_auto_page_break(False, margin=0)

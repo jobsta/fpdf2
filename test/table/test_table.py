@@ -18,6 +18,7 @@ TABLE_DATA = (
     ("Carlson", "Banks", "19", "Los Angeles"),
     ("Lucas", "Cimon", "31", "Angers"),
 )
+
 MULTILINE_TABLE_DATA = (
     ("Extract", "Text length"),
     (LOREM_IPSUM[:200], str(len(LOREM_IPSUM[:200]))),
@@ -26,6 +27,14 @@ MULTILINE_TABLE_DATA = (
     (LOREM_IPSUM[600:800], str(len(LOREM_IPSUM[600:800]))),
     (LOREM_IPSUM[800:1000], str(len(LOREM_IPSUM[800:1000]))),
     (LOREM_IPSUM[1000:1200], str(len(LOREM_IPSUM[1000:1200]))),
+)
+
+MULTI_HEADING_TABLE_DATA = (
+    ("Fruits", "Dairy"),
+    ("Apple", "Banana", "Cherry", "Cheese", "Milk", "Yogurt"),
+    ("1", "2", "3", "4", "5", "6"),
+    ("2", "3", "4", "5", "6", "7"),
+    ("3", "4", "5", "6", "7", "8"),
 )
 
 
@@ -39,6 +48,23 @@ def test_table_simple(tmp_path):
             for datum in data_row:
                 row.cell(datum)
     assert_pdf_equal(pdf, HERE / "table_simple.pdf", tmp_path)
+
+
+def test_table_with_no_row():
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Times", size=16)
+    with pdf.table():
+        pass
+
+
+def test_table_with_no_column():
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Times", size=16)
+    with pdf.table() as table:
+        for _ in TABLE_DATA:
+            table.row()
 
 
 def test_table_with_syntactic_sugar(tmp_path):
@@ -132,6 +158,7 @@ def test_table_with_multiline_cells_and_fixed_row_height(tmp_path):
             for datum in data_row:
                 row.cell(datum)
     assert pdf.pages_count == 2
+
     assert_pdf_equal(
         pdf, HERE / "table_with_multiline_cells_and_fixed_row_height.pdf", tmp_path
     )
@@ -216,9 +243,7 @@ def test_table_with_multiline_cells_and_split_over_3_pages(tmp_path):
                 row.cell(datum)
     assert pdf.pages_count == 4
     assert_pdf_equal(
-        pdf,
-        HERE / "table_with_multiline_cells_and_split_over_3_pages.pdf",
-        tmp_path,
+        pdf, HERE / "table_with_multiline_cells_and_split_over_3_pages.pdf", tmp_path
     )
 
 
@@ -282,6 +307,28 @@ def test_table_with_single_top_line_layout(tmp_path):
     assert_pdf_equal(pdf, HERE / "table_with_single_top_line_layout.pdf", tmp_path)
 
 
+def test_table_with_single_top_line_layout_and_page_break(tmp_path):  # PR #912
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Times", size=16)
+    pdf.set_draw_color(50)  # very dark grey
+    pdf.set_line_width(0.5)
+    data = list(MULTILINE_TABLE_DATA)
+    # Reducing the text content on the 3rd line
+    # so that there is an even number of rows on the 1st page:
+    data[2] = (data[2][0][:-30], data[2][1])
+    with pdf.table(
+        borders_layout="SINGLE_TOP_LINE", cell_fill_color=230, cell_fill_mode="ROWS"
+    ) as table:
+        for data_row in data:
+            row = table.row()
+            for datum in data_row:
+                row.cell(datum)
+    assert_pdf_equal(
+        pdf, HERE / "table_with_single_top_line_layout_and_page_break.pdf", tmp_path
+    )
+
+
 def test_table_align(tmp_path):
     pdf = FPDF()
     pdf.add_page()
@@ -304,14 +351,17 @@ def test_table_capture_font_settings(tmp_path):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Times", size=16)
+    black = (0, 0, 0)
     lightblue = (173, 216, 230)
-    with pdf.table() as table:
-        for data_row in TABLE_DATA:
+    with pdf.table(headings_style=FontFace(color=black, emphasis="B")) as table:
+        for row_num, data_row in enumerate(TABLE_DATA):
             with pdf.local_context(text_color=lightblue):
                 row = table.row()
-                for i, datum in enumerate(data_row):
-                    pdf.font_style = "I" if i == 0 else ""
-                    row.cell(datum)
+                for col_num, datum in enumerate(data_row):
+                    font_style = FontFace(
+                        emphasis="I" if row_num > 0 and col_num == 0 else None
+                    )
+                    row.cell(datum, style=font_style)
     assert_pdf_equal(pdf, HERE / "table_capture_font_settings.pdf", tmp_path)
 
 
@@ -379,3 +429,272 @@ def test_table_with_cell_overflow(tmp_path):
         row.cell("B2")
         row.cell("B3")
     assert_pdf_equal(pdf, HERE / "table_with_cell_overflow.pdf", tmp_path)
+
+
+def test_table_with_gutter(tmp_path):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Times", size=16)
+    with pdf.table(TABLE_DATA, gutter_height=3, gutter_width=3):
+        pass
+    pdf.ln(10)
+    with pdf.table(
+        TABLE_DATA, borders_layout="SINGLE_TOP_LINE", gutter_height=3, gutter_width=3
+    ):
+        pass
+
+    assert_pdf_equal(pdf, HERE / "table_with_gutter.pdf", tmp_path)
+
+
+def test_table_with_colspan_and_gutter(tmp_path):  # issue 808
+    pdf = FPDF()
+    pdf.set_font("Times", size=30)
+    pdf.add_page()
+    with pdf.table(col_widths=(1, 2, 1, 1), gutter_height=5, gutter_width=5) as table:
+        row = table.row()
+        row.cell("0")
+        row.cell("1")
+        row.cell("2")
+        row.cell("3")
+        row = table.row()
+        row.cell("A1")
+        row.cell("A2", colspan=2)
+        row.cell("A3")
+        row = table.row()
+        row.cell("B1", colspan=2)
+        row.cell("B2")
+        row.cell("B3")
+    assert_pdf_equal(pdf, HERE / "table_with_colspan_and_gutter.pdf", tmp_path)
+
+
+def test_table_with_capitalized_font_family_and_emphasis():  # issue 828
+    pdf = FPDF()
+    pdf.add_page()
+    with pdf.table(
+        TABLE_DATA, headings_style=FontFace(family="Helvetica", emphasis="ITALICS")
+    ):
+        pass
+
+
+def test_table_with_no_headers_nor_horizontal_lines(tmp_path):  # discussion 924
+    pdf = FPDF()
+    pdf.set_font("Helvetica")
+    pdf.add_page()
+    with pdf.table(
+        TABLE_DATA,
+        cell_fill_color=200,
+        cell_fill_mode="ROWS",
+        text_align="LEFT",
+        borders_layout="NO_HORIZONTAL_LINES",
+        first_row_as_headings=False,
+    ):
+        pass
+    assert_pdf_equal(
+        pdf, HERE / "table_with_no_headers_nor_horizontal_lines.pdf", tmp_path
+    )
+
+
+def test_table_page_break_with_table_in_header(tmp_path):  # issue 943
+    class PDF(FPDF):
+        def header(self):
+            with self.table() as t:
+                r = t.row()
+                r.cell("headertext")
+
+    pdf = PDF()
+    pdf.set_font("helvetica", "B", 8)
+    pdf.add_page()
+    with pdf.table() as table:
+        for _ in range(1, 15):
+            for data_row in TABLE_DATA:
+                table.row(data_row)
+    assert_pdf_equal(pdf, HERE / "table_page_break_with_table_in_header.pdf", tmp_path)
+
+
+def test_table_with_multiple_headings_and_pagebreak(tmp_path):
+    pdf = FPDF()
+    pdf.set_font("Times", size=12)
+    pdf.add_page()
+    pdf.set_y(240)
+    with pdf.table(
+        num_heading_rows=2,
+    ) as table:
+        for j, rowdata in enumerate(MULTI_HEADING_TABLE_DATA):
+            if j == 0:
+                # row with colspan
+                row = table.row()
+                for cell in rowdata:
+                    row.cell(text=cell, colspan=3)
+            else:
+                table.row(cells=rowdata)
+    assert_pdf_equal(
+        pdf,
+        HERE / "table_with_multiple_headings_and_pagebreak.pdf",
+        tmp_path,
+    )
+
+
+def test_table_num_heading_rows_and_first_row_as_headings():
+    pdf = FPDF()
+    pdf.set_font("Times", size=12)
+    pdf.add_page()
+    with pytest.raises(ValueError):
+        with pdf.table(TABLE_DATA, first_row_as_headings=True, num_heading_rows=0):
+            pass
+    with pytest.raises(ValueError):
+        with pdf.table(TABLE_DATA, first_row_as_headings=False, num_heading_rows=2):
+            pass
+
+
+def test_table_with_multiple_headings_and_no_horizontal_lines(tmp_path):
+    pdf = FPDF()
+    pdf.set_font("Times", size=12)
+    pdf.add_page()
+    with pdf.table(
+        borders_layout="NO_HORIZONTAL_LINES",
+        num_heading_rows=2,
+    ) as table:
+        for j, rowdata in enumerate(MULTI_HEADING_TABLE_DATA):
+            if j == 0:
+                # row with colspan
+                row = table.row()
+                for cell in rowdata:
+                    row.cell(text=cell, colspan=3)
+            else:
+                table.row(cells=rowdata)
+    assert_pdf_equal(
+        pdf,
+        HERE / "table_with_multiple_headings_and_no_horizontal_lines.pdf",
+        tmp_path,
+    )
+
+
+def test_table_with_minimal_layout_and_multiple_headings(tmp_path):
+    pdf = FPDF()
+    pdf.set_font("Times", size=12)
+    pdf.add_page()
+    pdf.set_draw_color(100)  # dark grey
+    pdf.set_line_width(1)
+    with pdf.table(
+        borders_layout="MINIMAL",
+        num_heading_rows=2,
+    ) as table:
+        for j, rowdata in enumerate(MULTI_HEADING_TABLE_DATA):
+            if j == 0:
+                # row with colspan
+                row = table.row()
+                for cell in rowdata:
+                    row.cell(text=cell, colspan=3)
+            else:
+                table.row(cells=rowdata)
+    assert_pdf_equal(
+        pdf,
+        HERE / "table_with_minimal_layout_and_multiple_headings.pdf",
+        tmp_path,
+    )
+
+
+def test_table_with_single_top_line_layout_and_multiple_headings(tmp_path):
+    pdf = FPDF()
+    pdf.set_font("Times", size=12)
+    pdf.add_page()
+    with pdf.table(
+        borders_layout="SINGLE_TOP_LINE",
+        num_heading_rows=2,
+    ) as table:
+        for j, rowdata in enumerate(MULTI_HEADING_TABLE_DATA):
+            if j == 0:
+                # row with colspan
+                row = table.row()
+                for cell in rowdata:
+                    row.cell(text=cell, colspan=3)
+            else:
+                table.row(cells=rowdata)
+
+    assert_pdf_equal(
+        pdf,
+        HERE / "table_with_single_top_line_layout_and_multiple_headings.pdf",
+        tmp_path,
+    )
+
+
+def test_table_with_no_horizontal_lines_layout(tmp_path):
+    pdf = FPDF()
+    pdf.set_font("Times", size=12)
+    pdf.add_page()
+    with pdf.table(
+        TABLE_DATA,
+        borders_layout="NO_HORIZONTAL_LINES",
+        num_heading_rows=1,
+    ):
+        pass
+    assert_pdf_equal(
+        pdf,
+        HERE / "table_with_no_horizontal_lines_layout.pdf",
+        tmp_path,
+    )
+
+
+def test_table_with_heading_style_overrides(tmp_path):
+    pdf = FPDF()
+    pdf.set_font(family="helvetica", size=10)
+    pdf.add_page()
+
+    with pdf.table(
+        headings_style=FontFace(emphasis="B", size_pt=18), num_heading_rows=2
+    ) as table:
+        # should be Helvetica bold size 18
+        table.row().cell("Big Heading", colspan=3)
+        second_header = table.row()
+        # should be Helvetica bold size 14:
+        second_header_style_1 = FontFace(size_pt=14)
+        second_header.cell("First", style=second_header_style_1)
+        # should be Times italic size 14
+        second_header_style_2_3 = FontFace(family="times", emphasis="I", size_pt=14)
+        second_header.cell("Second", style=second_header_style_2_3)
+        second_header.cell("Third", style=second_header_style_2_3)
+        # should be helvetica normal size 10
+        table.row(("Some", "Normal", "Data"))
+
+    assert_pdf_equal(pdf, HERE / "table_with_heading_style_overrides.pdf", tmp_path)
+
+
+def test_table_with_set_fill_color(tmp_path):  # issue 963
+    pdf = FPDF()
+    pdf.set_font("helvetica", size=10)
+    pdf.add_page()
+    with pdf.table(first_row_as_headings=False) as table:
+        row = table.row()
+        pdf.set_fill_color(200)
+        pdf.set_fill_color(200, 200, 200)
+        row.cell("Hello")
+    assert_pdf_equal(
+        pdf,
+        HERE / "table_with_set_fill_color.pdf",
+        tmp_path,
+    )
+
+
+def test_table_with_fill_color_set_beforehand(tmp_path):  # issue 932
+    pdf = FPDF()
+    pdf.set_font("Helvetica")
+    pdf.set_fill_color((126, 217, 87))  # green
+    pdf.add_page()
+    with pdf.table(
+        cell_fill_color=(200, 200, 200),  # light grey
+        cell_fill_mode="COLUMNS",
+        headings_style=FontFace(fill_color=(255, 255, 255)),  # white
+    ) as table:
+        for i, data_row in enumerate(TABLE_DATA):
+            if i == 2:
+                style = FontFace(fill_color=(250, 128, 114))  # salmon
+            else:
+                style = None
+            row = table.row(style=style)
+            for j, datum in enumerate(data_row):
+                if i == 2 and j == 2:
+                    style = FontFace(fill_color=(50, 50, 50))  # very dark grey
+                else:
+                    style = None
+                row.cell(datum, style=style)
+    assert_pdf_equal(pdf, HERE / "table_with_fill_color_set_beforehand.pdf", tmp_path)

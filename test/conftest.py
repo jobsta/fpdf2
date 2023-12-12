@@ -8,10 +8,10 @@ import functools
 import gc
 import hashlib
 import linecache
+import logging
 import os
 import pathlib
 import shutil
-import sys
 import tracemalloc
 import warnings
 
@@ -140,6 +140,7 @@ def assert_pdf_equal(
     else:  # Fallback to hash comparison
         actual_hash = hashlib.md5(actual_pdf_path.read_bytes()).hexdigest()
         expected_hash = hashlib.md5(expected_pdf_path.read_bytes()).hexdigest()
+
         assert actual_hash == expected_hash, f"{actual_hash} != {expected_hash}"
 
 
@@ -208,12 +209,6 @@ def subst_streams_with_hashes(in_lines):
 
 
 def _qpdf(input_pdf_filepath):
-    if sys.platform == "cygwin":
-        # Lucas (2021/01/06) : this conversion of UNIX file paths to Windows ones is only needed
-        # for my development environment: Cygwin, a UNIX system, with a qpdf Windows binary. Sorry for the kludge!
-        input_pdf_filepath = (
-            _run_cmd("cygpath", "-w", str(input_pdf_filepath)).decode().strip()
-        )
     return _run_cmd(
         "qpdf",
         "--deterministic-id",
@@ -293,7 +288,7 @@ def ensure_rss_memory_below(mib):
       not an absolute memory amount, and hence better checks
       the memory usage of a single test, with more isolation to other tests
     * because it does not suffer from some memory_profiler issues:
-        + https://github.com/PyFPDF/fpdf2/issues/641#issuecomment-1465730884
+        + https://github.com/py-pdf/fpdf2/issues/641#issuecomment-1465730884
         + hanging MemTimer child process sometimes preventing PyTest finalization,
           blocking in multiprocessing.util._exit_function() :
           https://github.com/python/cpython/blob/3.11/Lib/multiprocessing/util.py#L355
@@ -338,6 +333,11 @@ def pytest_addoption(parser):
         action="store_true",
         help="Trace main memory allocations differences during the whole execution",
     )
+
+
+def pytest_configure():
+    "Disable some loggers."
+    logging.getLogger("fpdf.svg").propagate = False
 
 
 @pytest.fixture(scope="module", autouse=True)

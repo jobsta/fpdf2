@@ -199,6 +199,26 @@ class Align(CoerciveEnum):
         return super(cls, cls).coerce(value)
 
 
+class VAlign(CoerciveEnum):
+    """Defines how to vertically render text in a cell.
+    Default value is MIDDLE"""
+
+    M = intern("MIDDLE")
+    "Center text vertically"
+
+    T = intern("TOP")
+    "Place text at the top of the cell, but obey the cells padding"
+
+    B = intern("BOTTOM")
+    "Place text at the bottom of the cell, but obey the cells padding"
+
+    @classmethod
+    def coerce(cls, value):
+        if value == "":
+            return cls.M
+        return super(cls, cls).coerce(value)
+
+
 class TextEmphasis(CoerciveIntFlag):
     """
     Indicates use of bold / italics / underline.
@@ -293,6 +313,17 @@ class TableCellFillMode(CoerciveEnum):
 
     COLUMNS = intern("COLUMNS")
     "Fill only table cells in odd columns"
+
+    def should_fill_cell(self, i, j):
+        if self is self.NONE:
+            return False
+        if self is self.ALL:
+            return True
+        if self is self.ROWS:
+            return bool(i % 2)
+        if self is self.COLUMNS:
+            return bool(j % 2)
+        raise NotImplementedError
 
 
 class RenderStyle(CoerciveEnum):
@@ -392,6 +423,18 @@ class YPos(CoerciveEnum):
 
     BMARGIN = intern("BMARGIN")  # self.h - self.b_margin
     "bottom page margin (end of printable area)"
+
+
+class Angle(CoerciveIntEnum):
+    "Direction values used for mirror transformations specifying the angle of mirror line"
+    NORTH = 90
+    EAST = 0
+    SOUTH = 270
+    WEST = 180
+    NORTHEAST = 45
+    SOUTHEAST = 315
+    SOUTHWEST = 225
+    NORTHWEST = 135
 
 
 class PageLayout(CoerciveEnum):
@@ -833,3 +876,4 @@ class EncryptionMethod(Enum):
     NO_ENCRYPTION = 0
     RC4 = 1
     AES_128 = 2
+    AES_256 = 3

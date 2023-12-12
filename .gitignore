@@ -1,5 +1,6 @@
 # my files
 .env
+.DS_Store
 
 # codecov.io
 coverage.xml
@@ -64,4 +65,5 @@ nosetests.xml
 
 # Vim backup and swap files
 *.*~
+*.swo
 *.swp

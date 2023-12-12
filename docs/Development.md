@@ -1,42 +1,8 @@
 # Development
 
-This page has summary information about developing the PyPDF library.
+This page has summary information about developing the fpdf2 library.
 
 [TOC]
-
-## History
-
-This project, `fpdf2` is a _fork_ of the `PyFPDF` project, which can be found
-[on GitHub at reingart/pyfpdf](https://github.com/reingart/pyfpdf)
-but has been inactive since January of 2018.
-
-About the original `PyFPDF` lib:
-
-> This project started as a Python fork of the [FPDF](http://fpdf.org/) PHP library,
-> ported to Python by Max Pat in 2006: <http://www.fpdf.org/dl.php?id=94>.
-> Later, code for native reading TTF fonts was added.
-> The project aim is to keep the library up to date, to fulfill the goals of its
-> [original roadmap](https://github.com/reingart/pyfpdf/wiki/Roadmap) and provide
-> a general overhaul of the codebase to address technical debt keeping features from being added
-> and bugs to be eradicated.
-> Until 2015 the code was developed at [Google Code](https://code.google.com/p/pyfpdf/):
-> you can still access the [old issues](https://github.com/reingart/pyfpdf_googlecode/issues),
-> and [old wiki](https://github.com/reingart/pyfpdf_googlecode/tree/wiki).
-
-As of version [2.5.4](https://github.com/PyFPDF/fpdf2/blob/master/CHANGELOG.md),
-`fpdf2` is fully backward compatible with PyFPDF, with the exception of one minor point:
-for the [`cell()` method](fpdf/fpdf.html#fpdf.fpdf.FPDF.cell), the default value of `h` has changed.
-It used to be `0` and is now set to the current value of `FPDF.font_size`.
-
-
-## Usage
-
-- [PyPI download stats](https://pypistats.org/packages/fpdf2) - Downloads per release on [Pepy](https://pepy.tech/project/fpdf2)
-  - [pip trends: fpdf2 VS other PDF rendering libs](https://piptrends.com/compare/fpdf2-vs-fpdf-vs-PyPDF2-vs-borb-vs-reportlab)
-- packages using `fpdf2` can be listed using [GitHub Dependency graph: Dependents](https://github.com/PyFPDF/fpdf2/network/dependents),
-[Wheelodex](https://www.wheelodex.org/projects/fpdf2/rdepends/) or [Watchman Pypi](http://www.watchman-pypi.com).
-Some are also listed on [its libraries.io page](https://libraries.io/pypi/fpdf2).
-
 
 ## Repository structure
 
@@ -85,7 +51,7 @@ or globally through the `.pylintrc` file.
 ## Pre-commit hook
 This project uses `git` **pre-commit hooks**: https://pre-commit.com
 
-Those hooks are configured in [`.pre-commit-config.yaml`](https://github.com/PyFPDF/fpdf2/blob/master/.pre-commit-config.yaml).
+Those hooks are configured in [`.pre-commit-config.yaml`](https://github.com/py-pdf/fpdf2/blob/master/.pre-commit-config.yaml).
 
 They are intended to abort your commit if `pylint` found issues
 or `black` detected non-properly formatted code.
@@ -103,6 +69,11 @@ pre-commit install
 ### Running tests
 To run tests, `cd` into `fpdf2` repository, install the dependencies using
 `pip install -r test/requirements.txt`,  and run `pytest`.
+
+You may also need to install [SWIG](https://swig.org/index.html) and [Ghostscript](https://www.ghostscript.com/),
+because they are dependencies for `camelot`, a library for table extraction in PDF that we test in `test/table/test_table_extraction.py`.
+Those tests will always be executed by the GitHub Actions pipeline,
+so you can also not bother installing those tools and skip those tests by running `pytest -k "not camelot"`.
 
 You can run a single test by executing: `pytest -k function_name`.
 
@@ -150,8 +121,76 @@ All generated PDF files (including those processed by `qpdf`) will be stored in
 last test runs will be saved and then automatically deleted, so you can
 check the output in case of a failed test.
 
+### Generating PDF files for testing
 In order to generate a "reference" PDF file, simply call `assert_pdf_equal`
 once with `generate=True`.
+
+```
+import fpdf
+
+svg = fpdf.svg.SVGObject.from_file("path/to/file.svg")
+pdf = fpdf.FPDF(unit="pt", format=(svg.width, svg.height))
+pdf.add_page()
+svg.draw_to_page(pdf)
+
+assert_pdf_equal(
+    pdf,  
+    "path/for/pdf/output.pdf",
+    "path/for/pdf/",
+    generate=True
+)
+```
+
+## Testing performances
+
+### Code speed & profiling
+First, try to write a really **MINIMAL** Python script that focus strictly
+on the performance point you are investigating.
+Try to choose the input dataset so that the script execution time is between 1 and 15 seconds.
+
+Then, you can use [`cProfile`](https://docs.python.org/3/library/profile.html)
+to profile your code and produce a `.pstats` file:
+```
+python -m cProfile -o profile.pstats script.py
+```
+
+Finally, you can quickly convert this `.pstats` file into a SVG flamegraph using [`flameprof`](https://pypi.org/project/flameprof/):
+```
+pip install flameprof
+flameprof profile.pstats > script-flamegraph.svg
+```
+You will get something like this:
+![](https://user-images.githubusercontent.com/925560/265462163-069ee203-a0d4-47ae-a90b-033ff47bf169.svg)
+
+Source GitHub thread where this was produced: [issue #907](https://github.com/py-pdf/fpdf2/issues/907#issuecomment-1705219932)
+
+### Tracking memory usage
+A good way to track memory usage is to insert calls to `fpdf.util.print_mem_usage()`
+in the code you are investigating.
+This function will display the current process [resident set size (RSS)](https://fr.wikipedia.org/wiki/Resident_set_size)
+which is currently, to the maintainer knowledge, one of the best way to get an accurate measure
+of Python scripts memory usage.
+
+There is an example of using this function to track `fpdf2` memory usage in this issue comment:
+[issue #641](https://github.com/py-pdf/fpdf2/issues/641#issuecomment-1485048161).
+This thread also includes some tests of other libs & tools to track memory usage.
+
+### Non-regression performance tests
+We try to have a small number of unit tests
+that ensure that the library performances do not degrade over time,
+when refactoring are made and new features added.
+
+We have 2 test decorators to help with this:
+
+* [@ensure_exec_time_below](https://github.com/py-pdf/fpdf2/blob/2.7.5/test/conftest.py#L252)
+* [@ensure_rss_memory_below](https://github.com/py-pdf/fpdf2/blob/2.7.5/test/conftest.py#L286)
+
+As of `fpdf2` v2.7.6, we only keep 3 non-regression performance tests:
+
+* [test_intense_image_rendering() in test_perfs.py](https://github.com/py-pdf/fpdf2/blob/2.7.5/test/test_perfs.py)
+* [test_charmap_first_999_chars() in test_charmap.py](https://github.com/py-pdf/fpdf2/blob/2.7.5/test/fonts/test_charmap.py#L41)
+* [test_cell_speed_with_long_text() in test_cell.py](https://github.com/py-pdf/fpdf2/blob/master/test/text/test_cell.py#L311)
+
 
 ## GitHub pipeline
 A [GitHub Actions](https://help.github.com/en/actions/reference) pipeline
@@ -165,13 +204,14 @@ Ask maintainers through comments if some errors in the pipeline seem obscure to 
 ### Release checklist
 1. complete `CHANGELOG.md` and add the version & date of the new release
 2. bump `FPDF_VERSION` in `fpdf/fpdf.py`.
-Also (optionnal, once every year), update `contributors/contributors-map-small.png` based on <https://pyfpdf.github.io/fpdf2/contributors.html>
-3. `git commit` & `git push`
-4. check that [the GitHub Actions succeed](https://github.com/PyFPDF/fpdf2/actions), and that [a new release appears on Pypi](https://pypi.org/project/fpdf2/#history)
-5. perform a [GitHub release](https://github.com/PyFPDF/fpdf2/releases), taking the description from the `CHANGELOG.md`.
+Also (optionnal, once every year), update `contributors/contributors-map-small.png` based on <https://py-pdf.github.io/fpdf2/contributors.html>
+3. update the `announce` block in `docs/overrides/main.html` to mention the new release
+4. `git commit` & `git push` (if editing in a fork: submit and merge a PR)
+5. check that [the GitHub Actions succeed](https://github.com/py-pdf/fpdf2/actions), and that [a new release appears on Pypi](https://pypi.org/project/fpdf2/#history)
+6. perform a [GitHub release](https://github.com/py-pdf/fpdf2/releases), taking the description from the `CHANGELOG.md`.
 It will create a new `git` tag.
-6. Announce the release on [r/pythonnews](https://www.reddit.com/r/pythonnews/),
-   and add an announcement to the documentation website: [docs/overrides/main.html](https://github.com/PyFPDF/fpdf2/blob/master/docs/overrides/main.html)
+7. Announce the release on [r/pythonnews](https://www.reddit.com/r/pythonnews/),
+   and add an announcement to the documentation website: [docs/overrides/main.html](https://github.com/py-pdf/fpdf2/blob/master/docs/overrides/main.html)
 
 ## Documentation
 The standalone documentation is in the `docs` subfolder,
@@ -180,10 +220,10 @@ Building instructions are contained in the configuration file `mkdocs.yml`
 and also in `.github/workflows/continuous-integration-workflow.yml`.
 
 Additional documentation is generated from inline comments, and is available
-in the project [home page](https://pyfpdf.github.io/fpdf2/fpdf/).
+in the project [home page](https://py-pdf.github.io/fpdf2/fpdf/).
 
 After being committed to the master branch, code documentation is automatically uploaded to
-[GitHub Pages](https://pyfpdf.github.io/fpdf2/).
+[GitHub Pages](https://py-pdf.github.io/fpdf2/).
 
 There is a useful one-page example Python module with docstrings illustrating how to document code:
 [pdoc3 example_pkg](https://github.com/pdoc3/pdoc/blob/master/pdoc/test/example_pkg/__init__.py).

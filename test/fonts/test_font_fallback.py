@@ -18,11 +18,11 @@ def test_fallback_font(tmp_path):
     pdf.add_font(family="Roboto", style="B", fname=HERE / "Roboto-Bold.ttf")
     pdf.add_font(family="DejaVuSans", fname=HERE / "DejaVuSans.ttf")
     pdf.set_font("Roboto", size=15)
-    pdf.write(txt="WITHOUT FALLBACK FONT:\n")
+    pdf.write(text="WITHOUT FALLBACK FONT:\n")
     write_strings(pdf)
 
     pdf.ln(10)
-    pdf.write(txt="WITH FALLBACK FONT:\n")
+    pdf.write(text="WITH FALLBACK FONT:\n")
     pdf.set_fallback_fonts(["DejaVuSans"])
     write_strings(pdf)
 
@@ -34,21 +34,21 @@ def test_fallback_font(tmp_path):
 
 
 def write_strings(pdf):
-    pdf.write(txt="write() 😄 😁 😆 😅 ✌")
+    pdf.write(text="write() 😄 😁 😆 😅 ✌")
     pdf.ln()
     pdf.cell(
-        txt="cell() without markdown 😄 😁**bold** 😆 😅 ✌",
+        text="cell() without markdown 😄 😁**bold** 😆 😅 ✌",
         new_x=XPos.LMARGIN,
         new_y=YPos.NEXT,
     )
     pdf.cell(
-        txt="cell() with markdown 😄 😁**bold** 😆 😅 ✌",
+        text="cell() with markdown 😄 😁**bold** 😆 😅 ✌",
         markdown=True,
         new_x=XPos.LMARGIN,
         new_y=YPos.NEXT,
     )
     pdf.multi_cell(
-        txt="multi_cell() 😄 😁 😆 😅 ✌",
+        text="multi_cell() 😄 😁 😆 😅 ✌",
         w=50,
         new_x=XPos.LMARGIN,
         new_y=YPos.NEXT,
@@ -78,7 +78,7 @@ def test_fallback_font_ignore_style(tmp_path):
 
     pdf.set_fallback_fonts(["DejaVuSans"], exact_match=True)
     pdf.cell(
-        txt="cell() with markdown + exact_match=True: **[😄 😁]** 😆 😅 ✌",
+        text="cell() with markdown + exact_match=True: **[😄 😁]** 😆 😅 ✌",
         markdown=True,
         new_x=XPos.LMARGIN,
         new_y=YPos.NEXT,
@@ -87,7 +87,7 @@ def test_fallback_font_ignore_style(tmp_path):
 
     pdf.set_fallback_fonts(["DejaVuSans"], exact_match=False)
     pdf.cell(
-        txt="cell() with markdown + exact_match=False: **[😄 😁]** 😆 😅 ✌",
+        text="cell() with markdown + exact_match=False: **[😄 😁]** 😆 😅 ✌",
         markdown=True,
         new_x=XPos.LMARGIN,
         new_y=YPos.NEXT,
@@ -96,7 +96,7 @@ def test_fallback_font_ignore_style(tmp_path):
 
     pdf.add_font(family="DejaVuSans", style="B", fname=HERE / "DejaVuSans-Bold.ttf")
     pdf.cell(
-        txt="cell() with markdown + matching font style: **[😄 😁]** 😆 😅 ✌",
+        text="cell() with markdown + matching font style: **[😄 😁]** 😆 😅 ✌",
         markdown=True,
         new_x=XPos.LMARGIN,
         new_y=YPos.NEXT,
@@ -110,7 +110,7 @@ def test_fallback_font_ignore_style(tmp_path):
         family="DejaVuSans", style="IB", fname=HERE / "DejaVuSans-BoldOblique.ttf"
     )
     pdf.cell(
-        txt="cell() with markdown + bold-italics: __{**[😄 😁]** 😆 😅}__ ✌",
+        text="cell() with markdown + bold-italics: __{**[😄 😁]** 😆 😅}__ ✌",
         markdown=True,
         new_x=XPos.LMARGIN,
         new_y=YPos.NEXT,
@@ -130,7 +130,7 @@ def test_fallback_font_with_overriden_get_fallback_font(tmp_path):
             fonts_with_char = [
                 font_id
                 for font_id in self._fallback_font_ids
-                if ord(char) in self.fonts[font_id]["cmap"]
+                if ord(char) in self.fonts[font_id].cmap
             ]
             if not fonts_with_char:
                 return None
@@ -153,14 +153,14 @@ def test_fallback_font_with_overriden_get_fallback_font(tmp_path):
     pdf.set_fallback_fonts(["DejaVuSans", "TwitterEmoji", "Waree"])
     pdf.set_font("Quicksand", size=20)
     pdf.cell(
-        txt=text,
+        text=text,
         new_x=XPos.LMARGIN,
         new_y=YPos.NEXT,
     )
     pdf.ln()
     pdf.set_font("Roboto", size=20)
     pdf.cell(
-        txt=text,
+        text=text,
         new_x=XPos.LMARGIN,
         new_y=YPos.NEXT,
     )
@@ -196,6 +196,6 @@ def test_glyph_not_on_any_font(caplog):
     pdf.add_font(family="DejaVuSans", fname=HERE / "DejaVuSans.ttf")
     pdf.set_font("Roboto")
     pdf.set_fallback_fonts(["DejaVuSans"])
-    pdf.cell(txt="Test 𝕥𝕖𝕤𝕥 🆃🅴🆂🆃 😲")
+    pdf.cell(text="Test 𝕥𝕖𝕤𝕥 🆃🅴🆂🆃 😲")
     pdf.output(devnull)
     assert "Roboto is missing the following glyphs: 🆃, 🅴, 🆂" in caplog.text

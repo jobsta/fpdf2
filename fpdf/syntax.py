@@ -1,6 +1,5 @@
-"""Classes & functions that represent core elements of the PDF syntax
-
-Functions in this module take variable input and produce PDF Syntax features.
+"""
+Classes & functions that represent core elements of the PDF syntax
 
 Most of what happens in a PDF happens in objects, which are formatted like so:
 ```
@@ -56,8 +55,9 @@ endstream
 endobj
 ```
 
-In this case, the ASCIIHexDecode filter is used because
-"68656c6c6f20776f726c64" is "hello world" in ascii, and 22 is the length of that string.
+The contents of this module are internal to fpdf2, and not part of the public API.
+They may change at any time without prior warning or any deprecation period,
+in non-backward-compatible ways.
 """
 import re, zlib
 from abc import ABC
@@ -144,7 +144,6 @@ class PDFObject:
 
     # Note: several child classes use __slots__ to save up some memory
 
-    # pylint: disable=redefined-builtin
     def __init__(self):
         self._id = None
 
@@ -179,6 +178,7 @@ class PDFObject:
         output.append("endobj")
         return "\n".join(output)
 
+    # pylint: disable=no-self-use
     def content_stream(self):
         "Subclasses can override this method to indicate the presence of a content stream"
         return b""
@@ -198,9 +198,16 @@ class PDFObject:
 
 
 class PDFContentStream(PDFObject):
+    # Passed to zlib.compress() - In range 0-9 - Default is currently equivalent to 6:
+    _COMPRESSION_LEVEL = -1
+
     def __init__(self, contents, compress=False):
         super().__init__()
-        self._contents = zlib.compress(contents) if compress else contents
+        self._contents = (
+            zlib.compress(contents, level=self._COMPRESSION_LEVEL)
+            if compress
+            else contents
+        )
         self.filter = Name("FlateDecode") if compress else None
         self.length = len(self._contents)
 
@@ -234,6 +241,7 @@ def build_obj_dict(key_values, _security_handler=None, _obj_id=None):
             or value is None
         ):
             continue
+        # pylint: disable=redefined-loop-name
         if hasattr(value, "value"):  # e.g. Enum subclass
             value = value.value
         if isinstance(value, PDFObject):  # indirect object reference
@@ -323,7 +331,7 @@ class PDFArray(list):
         if all(isinstance(elem, str) for elem in self):
             serialized_elems = " ".join(self)
         elif all(isinstance(elem, int) for elem in self):
-            serialized_elems = " ".join(map(str, self))
+            serialized_elems = " ".join(str(elem) for elem in self)
         else:
             serialized_elems = "\n".join(
                 elem.ref
@@ -357,6 +365,9 @@ class DestinationXYZ(Destination):
             and self.left == dest.left
             and self.zoom == dest.zoom
         )
+
+    def __hash__(self):
+        return hash((self.page_number, self.top, self.left, self.zoom))
 
     def __repr__(self):
         return f'DestinationXYZ(page_number={self.page_number}, top={self.top}, left={self.left}, zoom="{self.zoom}", page_ref={self.page_ref})'

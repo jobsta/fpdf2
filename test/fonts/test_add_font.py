@@ -30,28 +30,50 @@ def test_deprecation_warning_for_FPDF_CACHE_DIR():
     # pylint: disable=import-outside-toplevel,pointless-statement,reimported
     from fpdf import fpdf
 
-    with pytest.warns(DeprecationWarning):
+    with pytest.warns(DeprecationWarning) as record:
         fpdf.FPDF_CACHE_DIR
-    with pytest.warns(DeprecationWarning):
+    assert len(record) == 1
+    assert record[0].filename == __file__
+
+    with pytest.warns(DeprecationWarning) as record:
         fpdf.FPDF_CACHE_DIR = "/tmp"
-    with pytest.warns(DeprecationWarning):
+    assert len(record) == 1
+    assert record[0].filename == __file__
+
+    with pytest.warns(DeprecationWarning) as record:
         fpdf.FPDF_CACHE_MODE
-    with pytest.warns(DeprecationWarning):
+    assert len(record) == 1
+    assert record[0].filename == __file__
+
+    with pytest.warns(DeprecationWarning) as record:
         fpdf.FPDF_CACHE_MODE = 1
+    assert len(record) == 1
+    assert record[0].filename == __file__
 
     fpdf.SOME = 1
     assert fpdf.SOME == 1
 
     import fpdf
 
-    with pytest.warns(DeprecationWarning):
+    with pytest.warns(DeprecationWarning) as record:
         fpdf.FPDF_CACHE_DIR
-    with pytest.warns(DeprecationWarning):
+    assert len(record) == 1
+    assert record[0].filename == __file__
+
+    with pytest.warns(DeprecationWarning) as record:
         fpdf.FPDF_CACHE_DIR = "/tmp"
-    with pytest.warns(DeprecationWarning):
+    assert len(record) == 1
+    assert record[0].filename == __file__
+
+    with pytest.warns(DeprecationWarning) as record:
         fpdf.FPDF_CACHE_MODE
-    with pytest.warns(DeprecationWarning):
+    assert len(record) == 1
+    assert record[0].filename == __file__
+
+    with pytest.warns(DeprecationWarning) as record:
         fpdf.FPDF_CACHE_MODE = 1
+    assert len(record) == 1
+    assert record[0].filename == __file__
 
     fpdf.SOME = 1
     assert fpdf.SOME == 1
@@ -60,13 +82,17 @@ def test_deprecation_warning_for_FPDF_CACHE_DIR():
 def test_add_font_with_str_fname_ok(tmp_path):
     font_file_path = str(HERE / "Roboto-Regular.ttf")
     for font_cache_dir in (True, str(tmp_path), None):
-        with pytest.warns(DeprecationWarning):
+        with pytest.warns(DeprecationWarning) as record:
             pdf = FPDF(font_cache_dir=font_cache_dir)
             pdf.add_font(fname=font_file_path)
             pdf.set_font("Roboto-Regular", size=64)
             pdf.add_page()
-            pdf.cell(txt="Hello World!")
+            pdf.cell(text="Hello World!")
             assert_pdf_equal(pdf, HERE / "add_font_unicode.pdf", tmp_path)
+
+        for r in record:
+            if r.category == DeprecationWarning:
+                assert r.filename == __file__
 
 
 def test_add_core_fonts():
@@ -74,7 +100,7 @@ def test_add_core_fonts():
     pdf = FPDF()
     pdf.add_page()
 
-    with pytest.warns(UserWarning):  # "already added".
+    with pytest.warns(UserWarning) as record:  # "already added".
         pdf.add_font("Helvetica", fname=font_file_path)
         pdf.add_font("Helvetica", style="B", fname=font_file_path)
         pdf.add_font("helvetica", style="IB", fname=font_file_path)
@@ -82,13 +108,16 @@ def test_add_core_fonts():
         pdf.add_font("courier", fname=font_file_path)
         assert not pdf.fonts  # No fonts added, as all of them are core fonts
 
+    for r in record:
+        assert r.filename == __file__
+
 
 def test_render_en_dash(tmp_path):  # issue-166
     pdf = FPDF()
     pdf.add_font(fname=HERE / "Roboto-Regular.ttf")
     pdf.set_font("Roboto-Regular", size=120)
     pdf.add_page()
-    pdf.cell(w=pdf.epw, txt="–")  # U+2013
+    pdf.cell(w=pdf.epw, text="–")  # U+2013
     assert_pdf_equal(pdf, HERE / "render_en_dash.pdf", tmp_path)
 
 
@@ -103,9 +132,9 @@ def test_add_font_otf(tmp_path):
         "Lorem ipsum dolor, **consectetur adipiscing** elit,"
         " eiusmod __tempor incididunt__ ut labore et dolore --magna aliqua--."
     )
-    pdf.multi_cell(w=pdf.epw, txt=text, markdown=True)
+    pdf.multi_cell(w=pdf.epw, text=text, markdown=True)
     pdf.ln()
-    pdf.multi_cell(w=pdf.epw, txt=text, markdown=True, align="L")
+    pdf.multi_cell(w=pdf.epw, text=text, markdown=True, align="L")
     assert_pdf_equal(pdf, HERE / "fonts_otf.pdf", tmp_path)
 
 
@@ -120,6 +149,6 @@ def test_font_missing_glyphs(caplog):
     pdf.add_page()
     pdf.add_font(family="Roboto", fname=HERE / "Roboto-Regular.ttf")
     pdf.set_font("Roboto")
-    pdf.cell(txt="Test 𝕥𝕖𝕤𝕥 🆃🅴🆂🆃 😲")
+    pdf.cell(text="Test 𝕥𝕖𝕤𝕥 🆃🅴🆂🆃 😲")
     pdf.output(devnull)
     assert "Roboto is missing the following glyphs: 𝕥, 𝕖, 𝕤, 🆃, 🅴, 🆂, 😲" in caplog.text

@@ -1,4 +1,5 @@
-import base64, zlib
+import base64, hashlib, io, zlib
+from dataclasses import dataclass
 from io import BytesIO
 from math import ceil
 from urllib.request import urlopen
@@ -14,15 +15,25 @@ try:
 
         RESAMPLE = Resampling.LANCZOS
     except ImportError:  # For Pillow < 9.1.0
+        # pylint: disable=no-member, useless-suppression
         RESAMPLE = Image.ANTIALIAS
 except ImportError:
     Image = None
 
 from .errors import FPDFException
+from .image_datastructures import ImageCache, RasterImageInfo, VectorImageInfo
+from .svg import SVGObject
+
+
+@dataclass
+class ImageSettings:
+    # Passed to zlib.compress() - In range 0-9 - Default is currently equivalent to 6:
+    compression_level: int = -1
 
 
 LOGGER = logging.getLogger(__name__)
 SUPPORTED_IMAGE_FILTERS = ("AUTO", "FlateDecode", "DCTDecode", "JPXDecode")
+SETTINGS = ImageSettings()
 
 # fmt: off
 TIFFBitRevTable = [
@@ -56,6 +67,78 @@ TIFFBitRevTable = [
 # fmt: on
 
 
+def preload_image(image_cache: ImageCache, name, dims=None):
+    """
+    Read an image and load it into memory.
+
+    For raster images: following this call, the image is inserted in `image_cache.images`,
+    and following calls to `FPDF.image()` will re-use the same cached values, without re-reading the image.
+
+    For vector images: the data is loaded and the metadata extracted.
+
+    Args:
+        image_cache: an `ImageCache` instance, usually the `.image_cache` attribute of a `FPDF` instance.
+        name: either a string representing a file path to an image, an URL to an image,
+            an io.BytesIO, or a instance of `PIL.Image.Image`.
+        dims (Tuple[float]): optional dimensions as a tuple (width, height) to resize the image
+            (raster only) before storing it in the PDF.
+
+    Returns: A tuple, consisting of 3 values: the name, the image data,
+        and an instance of a subclass of `ImageInfo`.
+    """
+    # Identify and load SVG data:
+    if str(name).endswith(".svg"):
+        return get_svg_info(name, load_image(str(name)), image_cache=image_cache)
+    if isinstance(name, bytes) and _is_svg(name.strip()):
+        return get_svg_info(name, io.BytesIO(name), image_cache=image_cache)
+    if isinstance(name, io.BytesIO) and _is_svg(name.getvalue().strip()):
+        return get_svg_info("vector_image", name, image_cache=image_cache)
+
+    # Load raster data.
+    if isinstance(name, str):
+        img = None
+    elif isinstance(name, Image.Image):
+        bytes_ = name.tobytes()
+        img_hash = hashlib.new("md5", usedforsecurity=False)  # nosec B324
+        img_hash.update(bytes_)
+        name, img = img_hash.hexdigest(), name
+    elif isinstance(name, (bytes, io.BytesIO)):
+        bytes_ = name.getvalue() if isinstance(name, io.BytesIO) else name
+        bytes_ = bytes_.strip()
+        img_hash = hashlib.new("md5", usedforsecurity=False)  # nosec B324
+        img_hash.update(bytes_)
+        name, img = img_hash.hexdigest(), name
+    else:
+        name, img = str(name), name
+    info = image_cache.images.get(name)
+    if info:
+        info["usages"] += 1
+    else:
+        info = get_img_info(name, img, image_cache.image_filter, dims)
+        info["i"] = len(image_cache.images) + 1
+        info["usages"] = 1
+        info["iccp_i"] = None
+        iccp = info.get("iccp")
+        if iccp:
+            LOGGER.debug(
+                "ICC profile found for image %s - It will be inserted in the PDF document",
+                name,
+            )
+            if iccp in image_cache.icc_profiles:
+                info["iccp_i"] = image_cache.icc_profiles[iccp]
+            else:
+                iccp_i = len(image_cache.icc_profiles)
+                image_cache.icc_profiles[iccp] = iccp_i
+                info["iccp_i"] = iccp_i
+            info["iccp"] = None
+        image_cache.images[name] = info
+    return name, img, info
+
+
+def _is_svg(bytes_):
+    return bytes_.startswith(b"<?xml ") or bytes_.startswith(b"<svg ")
+
+
 def load_image(filename):
     """
     This method is used to load external resources, such as images.
@@ -73,7 +156,7 @@ def load_image(filename):
         # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
         with urlopen(filename) as url_file:  # nosec B310
             return BytesIO(url_file.read())
-    elif filename.startswith("data"):
+    elif filename.startswith("data:"):
         return _decode_base64_image(filename)
     with open(filename, "rb") as local_file:
         return BytesIO(local_file.read())
@@ -81,7 +164,10 @@ def load_image(filename):
 
 def _decode_base64_image(base64Image):
     "Decode the base 64 image string into an io byte stream."
-    imageData = base64Image.split("base64,")[1]
+    frags = base64Image.split("base64,")
+    if len(frags) != 2:
+        raise NotImplementedError("Unsupported non-base64 image data")
+    imageData = frags[1]
     decodedData = base64.b64decode(imageData)
     return BytesIO(decodedData)
 
@@ -104,6 +190,20 @@ def is_iccp_valid(iccp, filename):
     return True
 
 
+def get_svg_info(filename, img, image_cache):
+    svg = SVGObject(img.getvalue(), image_cache=image_cache)
+    if svg.viewbox:
+        _, _, w, h = svg.viewbox
+    else:
+        w = h = 0.0
+    if svg.width:
+        w = svg.width
+    if svg.height:
+        h = svg.height
+    info = VectorImageInfo(data=svg, w=w, h=h)
+    return filename, svg, info
+
+
 def get_img_info(filename, img=None, image_filter="AUTO", dims=None):
     """
     Args:
@@ -114,21 +214,21 @@ def get_img_info(filename, img=None, image_filter="AUTO", dims=None):
     if Image is None:
         raise EnvironmentError("Pillow not available - fpdf2 cannot insert images")
 
-    close_img = False  # set to True if image IO object was opened here and should be closed
-    # flag to check whether a cmyk image is jpeg or not, if set to True the decode array is inverted in output.py
+    is_pil_img = True
+    keep_bytes_io_open = False
+    # Flag to check whether a cmyk image is jpeg or not, if set to True the decode array
+    # is inverted in output.py
     jpeg_inverted = False
     img_raw_data = None
     if not img or isinstance(img, (Path, str)):
         img_raw_data = load_image(filename)
         img = Image.open(img_raw_data)
-        close_img = True
+        is_pil_img = False
     elif not isinstance(img, Image.Image):
-        if isinstance(img, bytes):
-            img = BytesIO(img)
-            # close image because we created a new BytesIO instance
-            close_img = True
-        img_raw_data = img
+        keep_bytes_io_open = isinstance(img, BytesIO)
+        img_raw_data = BytesIO(img) if isinstance(img, bytes) else img
         img = Image.open(img_raw_data)
+        is_pil_img = False
 
     img_altered = False
     if dims:
@@ -154,7 +254,7 @@ def get_img_info(filename, img=None, image_filter="AUTO", dims=None):
         img_altered = True
 
     w, h = img.size
-    info = {}
+    info = RasterImageInfo()
 
     iccp = None
     if "icc_profile" in img.info:
@@ -172,18 +272,21 @@ def get_img_info(filename, img=None, image_filter="AUTO", dims=None):
             if img.mode == "L":
                 dpn, bpc, colspace = 1, 8, "DeviceGray"
             img_raw_data.seek(0)
-            return {
-                "data": img_raw_data.read(),
-                "w": w,
-                "h": h,
-                "cs": colspace,
-                "iccp": iccp,
-                "dpn": dpn,
-                "bpc": bpc,
-                "f": image_filter,
-                "inverted": jpeg_inverted,
-                "dp": f"/Predictor 15 /Colors {dpn} /Columns {w}",
-            }
+            info.update(
+                {
+                    "data": img_raw_data.read(),
+                    "w": w,
+                    "h": h,
+                    "cs": colspace,
+                    "iccp": iccp,
+                    "dpn": dpn,
+                    "bpc": bpc,
+                    "f": image_filter,
+                    "inverted": jpeg_inverted,
+                    "dp": f"/Predictor 15 /Colors {dpn} /Columns {w}",
+                }
+            )
+            return info
         # We can directly copy the data out of a CCITT Group 4 encoded TIFF, if it
         # only contains a single strip
         if (
@@ -217,18 +320,21 @@ def get_img_info(filename, img=None, image_filter="AUTO", dims=None):
             else:
                 raise ValueError(f"unsupported FillOrder: {fillorder}")
             dpn, bpc, colspace = 1, 1, "DeviceGray"
-            return {
-                "data": ccittrawdata,
-                "w": w,
-                "h": h,
-                "iccp": None,
-                "dpn": dpn,
-                "cs": colspace,
-                "bpc": bpc,
-                "f": image_filter,
-                "inverted": jpeg_inverted,
-                "dp": f"/BlackIs1 {str(not inverted).lower()} /Columns {w} /K -1 /Rows {h}",
-            }
+            info.update(
+                {
+                    "data": ccittrawdata,
+                    "w": w,
+                    "h": h,
+                    "iccp": None,
+                    "dpn": dpn,
+                    "cs": colspace,
+                    "bpc": bpc,
+                    "f": image_filter,
+                    "inverted": jpeg_inverted,
+                    "dp": f"/BlackIs1 {str(not inverted).lower()} /Columns {w} /K -1 /Rows {h}",
+                }
+            )
+            return info
 
     # garbage collection
     img_raw_data = None
@@ -293,9 +399,11 @@ def get_img_info(filename, img=None, image_filter="AUTO", dims=None):
     if img.mode == "1":
         dp = f"/BlackIs1 true /Columns {w} /K -1 /Rows {h}"
 
-    # close image file if IO object was opened in this function
-    if close_img:
-        img.close()
+    if not is_pil_img:
+        if keep_bytes_io_open:
+            img.fp = None  # cf. issue #881
+        else:
+            img.close()
 
     info.update(
         {
@@ -310,7 +418,6 @@ def get_img_info(filename, img=None, image_filter="AUTO", dims=None):
             "dp": dp,
         }
     )
-
     return info
 
 
@@ -459,7 +566,7 @@ def _to_zdata(img, remove_slice=None, select_slice=None):
         data_with_padding.extend(b"\0")
         data_with_padding.extend(data[i : i + row_size])
 
-    return zlib.compress(data_with_padding)
+    return zlib.compress(data_with_padding, level=SETTINGS.compression_level)
 
 
 def _has_alpha(img, alpha_channel):

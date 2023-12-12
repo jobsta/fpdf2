@@ -1,5 +1,14 @@
+"""
+Vector drawing: managing colors, graphics states, paths, transforms...
+
+The contents of this module are internal to fpdf2, and not part of the public API.
+They may change at any time without prior warning or any deprecation period,
+in non-backward-compatible ways.
+"""
+
 import copy, decimal, math, re
 from collections import OrderedDict
+from collections.abc import Sequence
 from contextlib import contextmanager
 from typing import Optional, NamedTuple, Union
 
@@ -372,6 +381,17 @@ def gray8(g, a=None):
         a /= 255.0
 
     return DeviceGray(g / 255.0, a)
+
+
+def convert_to_device_color(r, g=-1, b=-1):
+    if isinstance(r, (DeviceGray, DeviceRGB)):
+        # Note: in this case, r is also a Sequence
+        return r
+    if isinstance(r, Sequence):
+        r, g, b = r
+    if (r, g, b) == (0, 0, 0) or g == -1:
+        return DeviceGray(r / 255)
+    return DeviceRGB(r / 255, g / 255, b / 255)
 
 
 def cmyk8(c, m, y, k, a=None):
@@ -2214,7 +2234,6 @@ class QuadraticBezierCurve(NamedTuple):
         Returns:
             a tuple of `(str, new_last_item)`, where `new_last_item` is `self`.
         """
-        # pylint: disable=unused-argument
         return (
             self.to_cubic_curve(last_item.end_point).render(
                 gsd_registry, style, last_item, initial_point
@@ -2286,7 +2305,6 @@ class RelativeQuadraticBezierCurve(NamedTuple):
             a tuple of `(str, new_last_item)`, where `new_last_item` is the resolved
             `QuadraticBezierCurve`.
         """
-        # pylint: disable=unused-argument
         last_point = last_item.end_point
 
         ctrl = last_point + self.ctrl
@@ -2489,7 +2507,6 @@ class Arc(NamedTuple):
             a tuple of `(str, new_last_item)`, where `new_last_item` is a resolved
             `BezierCurve`.
         """
-        # pylint: disable=unused-argument
         curves = self._approximate_arc(last_item)
 
         if not curves:
@@ -2527,7 +2544,6 @@ class Arc(NamedTuple):
         Returns:
             The same tuple as `Arc.render`.
         """
-        # pylint: disable=unused-argument
         curves = self._approximate_arc(last_item)
 
         debug_stream.write(f"{self} resolved to:\n")
@@ -2590,7 +2606,6 @@ class RelativeArc(NamedTuple):
             a tuple of `(str, new_last_item)`, where `new_last_item` is a resolved
             `BezierCurve`.
         """
-        # pylint: disable=unused-argument
         return Arc(
             self.radii,
             self.rotation,
@@ -2622,7 +2637,6 @@ class RelativeArc(NamedTuple):
         Returns:
             The same tuple as `RelativeArc.render`.
         """
-        # pylint: disable=unused-argument
         # newline is intentionally missing here
         debug_stream.write(f"{self} resolved to ")
 
@@ -2770,7 +2784,6 @@ class RoundedRectangle(NamedTuple):
             a tuple of `(str, new_last_item)`, where `new_last_item` is a resolved
             `Line`.
         """
-        # pylint: disable=unused-argument
         components = self._decompose()
 
         if not components:
@@ -2808,7 +2821,6 @@ class RoundedRectangle(NamedTuple):
         Returns:
             The same tuple as `RoundedRectangle.render`.
         """
-        # pylint: disable=unused-argument
         components = self._decompose()
 
         debug_stream.write(f"{self} resolved to:\n")
@@ -2882,7 +2894,6 @@ class Ellipse(NamedTuple):
             a tuple of `(str, new_last_item)`, where `new_last_item` is a resolved
             `Move` to the center of the ellipse.
         """
-        # pylint: disable=unused-argument
         components = self._decompose()
 
         if not components:
@@ -2920,7 +2931,6 @@ class Ellipse(NamedTuple):
         Returns:
             The same tuple as `Ellipse.render`.
         """
-        # pylint: disable=unused-argument
         components = self._decompose()
 
         debug_stream.write(f"{self} resolved to:\n")
@@ -2951,6 +2961,7 @@ class ImplicitClose(NamedTuple):
     `GraphicsStyle.auto_close`.
     """
 
+    # pylint: disable=no-self-use
     @force_nodocument
     def render(self, gsd_registry, style, last_item, initial_point):
         """
@@ -3015,6 +3026,7 @@ class Close(NamedTuple):
     See: `PaintedPath.close`
     """
 
+    # pylint: disable=no-self-use
     @force_nodocument
     def render(self, gsd_registry, style, last_item, initial_point):
         """
@@ -3157,7 +3169,6 @@ class DrawingContext:
             return ""
 
         style_dict_name = gsd_registry.register_style(style)
-
         if style_dict_name is not None:
             render_list.insert(2, f"{render_pdf_primitive(style_dict_name)} gs")
             render_list.insert(
@@ -3222,7 +3233,6 @@ class DrawingContext:
                 return ""
 
             style_dict_name = gsd_registry.register_style(style)
-
             if style_dict_name is not None:
                 render_list.insert(2, f"{render_pdf_primitive(style_dict_name)} gs")
                 render_list.insert(
@@ -3875,7 +3885,7 @@ class ClippingPath(PaintedPath):
             intersection_rule = ClippingPathIntersectionRule.NONZERO
         else:
             intersection_rule = ClippingPathIntersectionRule[
-                intersection_rule.name  # pylint: disable=no-member
+                intersection_rule.name  # pylint: disable=no-member, useless-suppression
             ]
 
         paint_rule = merged_style.resolve_paint_rule()

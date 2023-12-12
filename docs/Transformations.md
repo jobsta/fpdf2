@@ -1,6 +1,7 @@
 # Transformations #
 
 ## Rotation ##
+
 The [`rotation()`](fpdf/fpdf.html#fpdf.fpdf.FPDF.rotation) context-manager
 will apply a rotation to all objects inserted in its indented block:
 ```python
@@ -24,13 +25,13 @@ pdf.output("rotations.pdf")
 
 ```python
 with pdf.skew(ax=0, ay=10):
-    pdf.cell(txt="text skewed on the y-axis")
+    pdf.cell(text="text skewed on the y-axis")
 ```
 ![](y_axis_skewed_text.png)
 
 ```python
 with pdf.skew(ax=10, ay=0):
-    pdf.cell(txt="text skewed on the x-axis")
+    pdf.cell(text="text skewed on the x-axis")
 ```
 ![](x_axis_skewed_text.png)
 
@@ -42,3 +43,37 @@ with pdf.skew(ax=-45, ay=0, x=100, y=170):
     pdf.circle(x=100, y=170, r=10, style="FD")
 ```
 ![](slanted_circle.png)
+
+## Mirror ##
+
+_New in [:octicons-tag-24: 2.7.5](https://github.com/py-pdf/fpdf2/blob/master/CHANGELOG.md)_
+
+The `mirror` context-manager applies a mirror transformation to all objects inserted in its indented block over a given mirror line by specifying starting co-ordinate and angle.
+
+```python
+x, y = 100, 100
+pdf.text(x, y, text="mirror this text")
+with pdf.mirror((x, y), "EAST"):
+    pdf.set_text_color(r=255, g=128, b=0)
+    pdf.text(x, y, text="mirror this text")
+```
+![](horizontal_mirror.png)
+
+```python
+pdf.text(x, y, text="mirror this text")
+with pdf.mirror((x, y), "NORTH"):
+    pdf.set_text_color(r=255, g=128, b=0)
+    pdf.text(x, y, text="mirror this text")
+```
+![](vertical_mirror.png)
+
+```python
+prev_x, prev_y = pdf.x, pdf.y
+pdf.multi_cell(w=50, text=LOREM_IPSUM)
+with pdf.mirror((pdf.x, pdf.y), "NORTHEAST"):
+    # Reset cursor to mirror original multi-cell
+    pdf.x = prev_x
+    pdf.y = prev_y
+    pdf.multi_cell(w=50, text=LOREM_IPSUM, fill=True)
+```
+![](diagonal_mirror.png)

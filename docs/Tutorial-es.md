@@ -1,6 +1,6 @@
 # Tutorial #
 
-Documentación completa de los métodos: [Documentación de la API de `fpdf.FPDF`](https://pyfpdf.github.io/fpdf2/fpdf/fpdf.html#fpdf.fpdf.FPDF)
+Documentación completa de los métodos: [Documentación de la API de `fpdf.FPDF`](https://py-pdf.github.io/fpdf2/fpdf/fpdf.html#fpdf.fpdf.FPDF)
 
 [TOC]
 
@@ -12,7 +12,7 @@ Empecemos con el ejemplo clásico:
 {% include "../tutorial/tuto1.py" %}
 ```
 
-[PDF resultante](https://github.com/PyFPDF/fpdf2/raw/master/tutorial/tuto1.pdf)
+[PDF resultante](https://github.com/py-pdf/fpdf2/raw/master/tutorial/tuto1.pdf)
 
 Luego de incluir la biblioteca, creamos un objeto `FPDF`. El constructor 
 [FPDF](fpdf/fpdf.html#fpdf.fpdf.FPDF) es usado aquí con los valores predeterminados: 
@@ -76,7 +76,7 @@ Aquí hay un ejemplo de dos páginas con encabezado, pie de página y logo:
 {% include "../tutorial/tuto2.py" %}
 ```
 
-[PDF resultante](https://github.com/PyFPDF/fpdf2/raw/master/tutorial/tuto2.pdf)
+[PDF resultante](https://github.com/py-pdf/fpdf2/raw/master/tutorial/tuto2.pdf)
 
 Este ejemplo hace uso de los métodos [header](fpdf/fpdf.html#fpdf.fpdf.FPDF.header) y 
 [footer](fpdf/fpdf.html#fpdf.fpdf.FPDF.footer) para procesar encabezados y pies de página. Estos 
@@ -116,9 +116,9 @@ ilustra el uso de colores.
 {% include "../tutorial/tuto3.py" %}
 ```
 
-[PDF resultante](https://github.com/PyFPDF/fpdf2/raw/master/tutorial/tuto3.pdf)
+[PDF resultante](https://github.com/py-pdf/fpdf2/raw/master/tutorial/tuto3.pdf)
 
-[Texto de Julio Verne](https://github.com/PyFPDF/fpdf2/raw/master/tutorial/20k_c1.txt)
+[Texto de Julio Verne](https://github.com/py-pdf/fpdf2/raw/master/tutorial/20k_c1.txt)
 
 El método [get_string_width](fpdf/fpdf.html#fpdf.fpdf.FPDF.get_string_width) permite determinar 
 la longitud de una cadena de texto en la fuente actual, usada aquí para calcular la 
@@ -151,37 +151,34 @@ Este ejemplo es una variante del anterior, mostrando cómo poner el texto en mú
 {% include "../tutorial/tuto4.py" %}
 ```
 
-[PDF resultante](https://github.com/PyFPDF/fpdf2/raw/master/tutorial/tuto4.pdf)
+[PDF resultante](https://github.com/py-pdf/fpdf2/raw/master/tutorial/tuto4.pdf)
 
-[Texto de Julio Verne](https://github.com/PyFPDF/fpdf2/raw/master/tutorial/20k_c1.txt)
+[Texto de Julio Verne](https://github.com/py-pdf/fpdf2/raw/master/tutorial/20k_c1.txt)
 
-La diferencia clave con el tutorial anterior es el uso de los métodos 
-[accept_page_break](fpdf/fpdf.html#fpdf.fpdf.FPDF.accept_page_break) y set_col.
+La diferencia clave respecto al tutorial anterior es el uso del 
+método [`text_columns`](fpdf/fpdf.html#fpdf.fpdf.FPDF.text_column). 
+Este recoge todo el texto, posiblemente en incrementos, y lo distribuye entre el número de columnas solicitadas, insertando automáticamente saltos de página según sea necesario. Nota que mientras la instancia de `TextColumns` está activa como gestor de contexto, los estilos de texto y otras propiedades de la fuente pueden cambiarse. Estos cambios estarán contenidos en el contexto. Una vez se cierre, la configuración previa será reestablecida.
 
-Utilizando el método [accept_page_break](fpdf/fpdf.html#fpdf.fpdf.FPDF.accept_page_break), una vez 
-la celda cruce el límite inferior de la página, éste comprobará el número de la columna actual. Si 
-es menor que 2 (decidimos dividir la página en tres columnas) éste invocará al método set_col, 
-incrementando el número de columna y alterando la posición de la siguiente columna tal que el texto pueda continuar aquí.
-
-Una vez el límite inferior de la tercera columna es alcanzado, el 
-método [accept_page_break](fpdf/fpdf.html#fpdf.fpdf.FPDF.accept_page_break) se reiniciará y 
-volverá a la primera columna, desencadenando un salto de página.
 
 ## Tutorial 5 - Creando tablas ##
+
+Este tutorial explicará cómo crear dos tablas diferentes,
+ para demostrar lo que se puede lograr con algunos ajustes simples.
 
 ```python
 {% include "../tutorial/tuto5.py" %}
 ```
 
-[PDF resultante](https://github.com/PyFPDF/fpdf2/raw/master/tutorial/tuto5.pdf) -
-[Archivo de texto con países](https://github.com/PyFPDF/fpdf2/raw/master/tutorial/countries.txt)
+[PDF resultante](https://github.com/py-pdf/fpdf2/raw/master/tutorial/tuto5.pdf) -
+[Archivo de texto con países](https://github.com/py-pdf/fpdf2/raw/master/tutorial/countries.txt)
 
-_⚠️ This section has changed a lot and requires a new translation: <https://github.com/PyFPDF/fpdf2/issues/267>_
+El primer ejemplo es alcanzado de la forma más básica posible, alimentando datos a [`FPDF.table()`](https://py-pdf.github.io/fpdf2/Tables.html). El resultado es rudimentario pero muy rápido de obtener.
 
-English versions:
-
-* [Tuto 5 - Creating Tables](https://pyfpdf.github.io/fpdf2/Tutorial.html#tuto-5-creating-tables)
-* [Documentation on tables](https://pyfpdf.github.io/fpdf2/Tables.html)
+La segunda tabla trae algunas mejoras: colores, ancho de tabla limitado, altura de línea reducida,
+ títulos centrados, columnas con anchos personalizados, figuras alineadas a la derecha...
+ Aún más, las líneas horizontales han sido removidas.
+ Esto se hizo escogiendo un `borders_layout` entre los valores disponibles:
+ [`TableBordersLayout`](https://py-pdf.github.io/fpdf2/fpdf/enums.html#fpdf.enums.TableBordersLayout).
 
 ## Tutorial 6 - Creando enlaces y combinando estilos de texto ##
 
@@ -195,13 +192,13 @@ También mostrará muchas formas en que podemos usar los diferentes estilos de t
 {% include "../tutorial/tuto6.py" %}
 ```
 
-[PDF resultante](https://github.com/PyFPDF/fpdf2/raw/master/tutorial/tuto6.pdf) -
-[Logo de fpdf2](https://raw.githubusercontent.com/PyFPDF/fpdf2/master/docs/fpdf2-logo.png)
+[PDF resultante](https://github.com/py-pdf/fpdf2/raw/master/tutorial/tuto6.pdf) -
+[Logo de fpdf2](https://raw.githubusercontent.com/py-pdf/fpdf2/master/docs/fpdf2-logo.png)
 
 El nuevo método mostrado aquí para imprimir texto es
- [write()](https://pyfpdf.github.io/fpdf2/fpdf/fpdf.html#fpdf.fpdf.FPDF.write)
+ [write()](https://py-pdf.github.io/fpdf2/fpdf/fpdf.html#fpdf.fpdf.FPDF.write)
 . Es muy similar a
- [multi_cell()](https://pyfpdf.github.io/fpdf2/fpdf/fpdf.html#fpdf.fpdf.FPDF.multi_cell)
+ [multi_cell()](https://py-pdf.github.io/fpdf2/fpdf/fpdf.html#fpdf.fpdf.FPDF.multi_cell)
 , siendo las diferencias clave:
  
  - El final de línea está en el margen derecho y la siguiente línea comienza en el margen
@@ -213,22 +210,22 @@ El método por tanto nos permite escribir un trozo de texto, alterar el estilo d
 Por otro lado, su principal desventaja es que no podemos justificar el texto como
  hacemos con el
  método
- [multi_cell()](https://pyfpdf.github.io/fpdf2/fpdf/fpdf.html#fpdf.fpdf.FPDF.multi_cell).
+ [multi_cell()](https://py-pdf.github.io/fpdf2/fpdf/fpdf.html#fpdf.fpdf.FPDF.multi_cell).
 
 En la primera página del ejemplo usamos
- [write()](https://pyfpdf.github.io/fpdf2/fpdf/fpdf.html#fpdf.fpdf.FPDF.write)
+ [write()](https://py-pdf.github.io/fpdf2/fpdf/fpdf.html#fpdf.fpdf.FPDF.write)
  para este propósito. El comienzo de la oración está escrito usando texto en estilo
  regular, luego usando el método
- [set_font()](https://pyfpdf.github.io/fpdf2/fpdf/fpdf.html#fpdf.fpdf.FPDF.set_font)
+ [set_font()](https://py-pdf.github.io/fpdf2/fpdf/fpdf.html#fpdf.fpdf.FPDF.set_font)
  cambiamos a subrayado y terminamos la oración.
 
 Para agregar un enlace interno apuntando a la segunda página, usamos el método
- [add_link()](https://pyfpdf.github.io/fpdf2/fpdf/fpdf.html#fpdf.fpdf.FPDF.add_link)
+ [add_link()](https://py-pdf.github.io/fpdf2/fpdf/fpdf.html#fpdf.fpdf.FPDF.add_link)
 , el cual crea un área clicable a la que nombramos "link" que redirige a
  otro lugar dentro del documento.
 
 Para crear un enlace externo usando una imagen, usamos
- [image()](https://pyfpdf.github.io/fpdf2/fpdf/fpdf.html#fpdf.fpdf.FPDF.image)
+ [image()](https://py-pdf.github.io/fpdf2/fpdf/fpdf.html#fpdf.fpdf.FPDF.image)
 . El método tiene la
  opción de recibir un enlace como uno de sus argumentos. El enlace puede ser tanto interno
  como externo.
