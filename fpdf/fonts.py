@@ -23,6 +23,7 @@ except ImportError:
 
 from .drawing import convert_to_device_color, DeviceGray, DeviceRGB
 from .enums import FontDescriptorFlags, TextEmphasis
+from .errors import FPDFException
 from .syntax import Name, PDFObject
 from .util import escape_parens
 
@@ -297,7 +298,10 @@ class TTFFont:
             uni = ord(char)
             # Instead of adding the actual character to the stream its code is
             # mapped to a position in the font's subset
-            txt_mapped += chr(self.subset.pick(uni))
+            char_code = self.subset.pick(uni)
+            if char_code is None:
+                raise FPDFException(f"Character {char} is not contained in current font")
+            txt_mapped += chr(char_code)
         return f'({escape_parens(txt_mapped.encode("utf-16-be").decode("latin-1"))}) Tj'
 
     def shape_text(self, text, font_size_pt, text_shaping_parms):

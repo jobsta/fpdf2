@@ -3788,8 +3788,8 @@ class FPDF(GraphicsStateMixin, TextRegionMixin):
                 char = ord(c)
                 char_w = cw.get(char)
                 if char_w is None:
-                    if self.current_font['desc'].missing_width:
-                        char_w = self.current_font['desc'].missing_width
+                    if self.current_font.desc.missing_width:
+                        char_w = self.current_font.desc.missing_width
                     else:
                         char_w = 500
             else:
