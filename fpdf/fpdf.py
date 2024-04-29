@@ -2460,7 +2460,7 @@ class FPDF(GraphicsStateMixin, TextRegionMixin):
         sl = [f"BT {x * self.k:.2f} {(self.h - y) * self.k:.2f} Td"]
         if self.text_mode != TextMode.FILL:
             sl.append(f" {self.text_mode} Tr {self.line_width:.2f} w")
-        sl.append(f"{self.current_font.encode_text(text)} ET")
+        sl.append(f"{self.current_font.encode_text(text, self.encode_error_handling)} ET")
         if (self.underline and text != "") or self._record_text_quad_points:
             w = self.get_string_width(text, normalized=True, markdown=False)
             if self.underline and text != "":

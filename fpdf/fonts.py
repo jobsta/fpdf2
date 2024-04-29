@@ -117,7 +117,7 @@ class CoreFont:
 
     # Disabling this check - method kept as is to have same method/signature on CoreConf and TTFFont:
     # pylint: disable=no-self-use
-    def encode_text(self, text):
+    def encode_text(self, text, encode_error_handling):
         return f"({escape_parens(text)}) Tj"
 
     def __repr__(self):
@@ -143,6 +143,7 @@ class TTFFont:
         "cmap",
         "ttfont",
         "missing_glyphs",
+        "qm_char_code",
     )
 
     def __init__(self, fpdf, font_file_path, fontkey, style):
@@ -230,6 +231,8 @@ class TTFFont:
         self.ut = round(self.ttfont["post"].underlineThickness * self.scale)
         self.emphasis = TextEmphasis.coerce(style)
         self.subset = SubsetMap(self, [ord(char) for char in sbarr])
+        # char code for question mark, needed when missing character is replaced with "?"
+        self.qm_char_code = self.subset.pick(ord('?'))
 
     def __repr__(self):
         return f"TTFFont(i={self.i}, fontkey={self.fontkey})"
@@ -292,7 +295,7 @@ class TTFFont:
         hb.shape(self.hbfont, buf, features)
         return buf.glyph_infos, buf.glyph_positions
 
-    def encode_text(self, text):
+    def encode_text(self, text, encode_error_handling):
         txt_mapped = ""
         for char in text:
             uni = ord(char)
@@ -300,8 +303,15 @@ class TTFFont:
             # mapped to a position in the font's subset
             char_code = self.subset.pick(uni)
             if char_code is None:
-                raise FPDFException(f"Character {char} is not contained in current font")
-            txt_mapped += chr(char_code)
+                if encode_error_handling == 'strict':
+                    raise FPDFException(f"Character {char} is not contained in current font")
+                elif encode_error_handling == 'replace':
+                    if self.qm_char_code is None:
+                        raise FPDFException(f"? (to replace missing character {char}) is not contained in current font")
+                    txt_mapped += chr(self.qm_char_code)
+                # ignore character with encode_error_handling == 'ignore'
+            else:
+                txt_mapped += chr(char_code)
         return f'({escape_parens(txt_mapped.encode("utf-16-be").decode("latin-1"))}) Tj'
 
     def shape_text(self, text, font_size_pt, text_shaping_parms):
