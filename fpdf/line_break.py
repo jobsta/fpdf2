@@ -34,6 +34,7 @@ class Fragment:
         graphics_state: dict,
         k: float,
         link: Optional[Union[int, str]] = None,
+        fill_background: bool = False,
     ):
         if isinstance(characters, str):
             self.characters = list(characters)
@@ -42,12 +43,13 @@ class Fragment:
         self.graphics_state = graphics_state
         self.k = k
         self.link = link
+        self.fill_background = fill_background
 
     def __repr__(self):
         return (
             f"Fragment(characters={self.characters},"
             f" graphics_state={self.graphics_state},"
-            f" k={self.k}, link={self.link})"
+            f" k={self.k}, link={self.link}, fill_background={self.fill_background})"
         )
 
     @property
@@ -103,6 +105,10 @@ class Fragment:
     @property
     def underline(self):
         return self.graphics_state["underline"]
+
+    @property
+    def strikethrough(self):
+        return self.graphics_state["strikethrough"]
 
     @property
     def draw_color(self):
@@ -386,11 +392,12 @@ class CurrentLine:
         original_character_index: int,
         height: float,
         url: str = None,
+        fill_background: bool = False,
     ):
         assert character != NEWLINE
         self.height = height
         if not self.fragments:
-            self.fragments.append(Fragment("", graphics_state, k, url))
+            self.fragments.append(Fragment("", graphics_state, k, url, fill_background))
 
         # characters are expected to be grouped into fragments by font and
         # character attributes. If the last existing fragment doesn't match
@@ -399,7 +406,7 @@ class CurrentLine:
             graphics_state != self.fragments[-1].graphics_state
             or k != self.fragments[-1].k
         ):
-            self.fragments.append(Fragment("", graphics_state, k, url))
+            self.fragments.append(Fragment("", graphics_state, k, url, fill_background))
         active_fragment = self.fragments[-1]
 
         if character == SPACE:
@@ -543,10 +550,7 @@ class MultiLineBreak:
         """
 
         self.fragments = fragments
-        if callable(max_width):
-            self.get_width = max_width
-        else:
-            self.get_width = lambda height: max_width
+        self.get_width = None
         self.margins = margins
         self.align = align
         self.print_sh = print_sh
@@ -556,6 +560,19 @@ class MultiLineBreak:
         self.fragment_index = 0
         self.character_index = 0
         self.idx_last_forced_break = None
+        # a forced break is performed when available width is not enough for the first word and therefor
+        # only the first character(s) are returned, if set to False then an empty text is returned instead
+        self.allow_forced_break = True
+        self.set_width(max_width)
+
+    def set_width(self, max_width):
+        if callable(max_width):
+            self.get_width = max_width
+        else:
+            self.get_width = lambda height: max_width
+
+    def set_allow_forced_break(self, allow_forced_break):
+        self.allow_forced_break = allow_forced_break
 
     # pylint: disable=too-many-return-statements
     def get_line(self):
@@ -641,6 +658,20 @@ class MultiLineBreak:
                     ) = current_line.automatic_break(self.align)
                     self.character_index += 1
                     return line
+
+                if not self.allow_forced_break:
+                    # forced break is not allowed -> return empty line, this is used in case the
+                    # following line(s) have a larger width than the current line
+                    self.character_index = 0
+                    return TextLine(
+                        "",
+                        text_width=0,
+                        number_of_spaces=0,
+                        align=self.align,
+                        height=current_font_height * self.line_height,
+                        max_width=max_width,
+                    )
+
                 if idx_last_forced_break == self.character_index:
                     raise FPDFException(
                         "Not enough horizontal space to render a single character"
@@ -659,6 +690,7 @@ class MultiLineBreak:
                 self.character_index,
                 current_font_height * self.line_height,
                 current_fragment.link,
+                current_fragment.fill_background,
             )
 
             self.character_index += 1

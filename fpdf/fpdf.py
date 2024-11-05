@@ -17,7 +17,7 @@ from math import isclose
 from numbers import Number
 from os.path import splitext
 from pathlib import Path
-from typing import Callable, NamedTuple, Optional, Tuple, Union
+from typing import Callable, List, NamedTuple, Optional, Tuple, Union
 
 try:
     from endesive import signer
@@ -307,6 +307,7 @@ class FPDF(GraphicsStateMixin, TextRegionMixin):
         self.font_stretching = 100  # current font stretching
         self.char_spacing = 0  # current character spacing
         self.underline = False  # underlining flag
+        self.strikethrough = False  # flag for "strikethrough" style (line through middle of text)
         self.current_font = (
             None  # current font, None or an instance of CoreFont or TTFFont
         )
@@ -1881,15 +1882,20 @@ class FPDF(GraphicsStateMixin, TextRegionMixin):
 
         family = family.lower()
         style = "".join(sorted(style.upper()))
-        if any(letter not in "BIU" for letter in style):
+        if any(letter not in "BIUS" for letter in style):
             raise ValueError(
-                f"Unknown style provided (only B/I/U letters are allowed): {style}"
+                f"Unknown style provided (only B/I/U/S letters are allowed): {style}"
             )
         if "U" in style:
             self.underline = True
             style = style.replace("U", "")
         else:
             self.underline = False
+        if "S" in style:
+            self.strikethrough = True
+            style = style.replace("S", "")
+        else:
+            self.strikethrough = False
 
         if family in self.font_aliases and family + style not in self.fonts:
             warnings.warn(
@@ -2973,7 +2979,7 @@ class FPDF(GraphicsStateMixin, TextRegionMixin):
             self._add_quad_points(self.x, self.y, w, h)
 
         s_start = self.x
-        s_width, underlines = 0, []
+        s_width, underlines, strikethroughlines = 0, [], []
         # We try to avoid modifying global settings for temporary changes.
         current_ws = frag_ws = 0.0
         current_lift = 0.0
@@ -3003,6 +3009,23 @@ class FPDF(GraphicsStateMixin, TextRegionMixin):
                 f"{(self.h - self.y - 0.5 * h - 0.3 * max_font_size) * k:.2f} Td"
             )
             for i, frag in enumerate(text_line.fragments):
+                frag_width = frag.get_width(
+                    initial_cs=i != 0
+                ) + word_spacing * frag.characters.count(" ")
+
+                if frag.fill_background:
+                    # fill background for text fragment
+                    self.set_fill_color(frag.fill_color)
+                    self.rect(
+                        x=self.x + dx + s_width,
+                        # + (0.8 * h): baseline of text
+                        # - (0.8 * frag.font_size): top of text with fragment font size
+                        y=self.y + (0.8 * h) - (0.8 * frag.font_size),
+                        w=frag_width,
+                        h=frag.font_size,
+                        style='F',
+                    )
+
                 if frag.graphics_state["text_color"] != last_used_color:
                     # allow to change color within the line of text.
                     last_used_color = frag.graphics_state["text_color"]
@@ -3053,9 +3076,6 @@ class FPDF(GraphicsStateMixin, TextRegionMixin):
                 if r_text:
                     sl.append(r_text)
 
-                frag_width = frag.get_width(
-                    initial_cs=i != 0
-                ) + word_spacing * frag.characters.count(" ")
                 if frag.underline:
                     underlines.append(
                         (
@@ -3063,6 +3083,17 @@ class FPDF(GraphicsStateMixin, TextRegionMixin):
                             frag_width,
                             frag.font,
                             frag.font_size,
+                            frag.text_color,
+                        )
+                    )
+                if frag.strikethrough:
+                    strikethroughlines.append(
+                        (
+                            self.x + dx + s_width,
+                            frag_width,
+                            frag.font,
+                            frag.font_size,
+                            frag.draw_color,
                         )
                     )
                 if frag.link:
@@ -3079,11 +3110,25 @@ class FPDF(GraphicsStateMixin, TextRegionMixin):
 
             sl.append("ET")
 
-            for start_x, ul_w, ul_font, ul_font_size in underlines:
+            for start_x, ul_w, ul_font, ul_font_size, ul_draw_color in underlines:
+                # draw line with color of text fragment
+                sl.append(ul_draw_color.serialize())
                 sl.append(
                     self._do_underline(
                         start_x,
                         self.y + (0.5 * h) + (0.3 * ul_font_size),
+                        ul_w,
+                        ul_font,
+                    )
+                )
+            # draw lines for "strikethrough" style
+            for start_x, ul_w, ul_font, ul_font_size, ul_draw_color in strikethroughlines:
+                # draw line with color of text fragment
+                sl.append(ul_draw_color.serialize())
+                sl.append(
+                    self._do_underline(
+                        start_x,
+                        self.y + (0.5 * h + 0.3 * max_font_size - 0.4 * ul_font_size),
                         ul_w,
                         ul_font,
                     )
@@ -3165,7 +3210,7 @@ class FPDF(GraphicsStateMixin, TextRegionMixin):
             ]
         )
 
-    def _preload_font_styles(self, text, markdown):
+    def _preload_font_styles(self, text, markdown, link=None, fill_background=False):
         """
         When Markdown styling is enabled, we require secondary fonts
         to ender text in bold & italics.
@@ -3177,7 +3222,7 @@ class FPDF(GraphicsStateMixin, TextRegionMixin):
         if not text:
             return tuple()
         if not markdown:
-            return self._parse_chars(text)
+            return self._parse_chars(text, link=link, fill_background=fill_background)
         prev_font_style = self.font_style
         styled_txt_frags = tuple(self._markdown_parse(text))
         page = self.page
@@ -3197,12 +3242,13 @@ class FPDF(GraphicsStateMixin, TextRegionMixin):
         self.page = page
         return styled_txt_frags
 
-    def _parse_chars(self, text):
+    def _parse_chars(self, text, link, fill_background):
         "Check if the font has all the necessary glyphs. If a glyph from a fallback font is used, break into fragments"
         fragments = []
         txt_frag = []
         if not self.is_ttf_font or not self._fallback_font_ids:
-            return tuple([Fragment(text, self._get_current_graphics_state(), self.k)])
+            return tuple([Fragment(text, self._get_current_graphics_state(), self.k,
+                                   link=link, fill_background=fill_background)])
         font_glyphs = self.current_font.cmap
         for char in text:
             if char == "\n" or ord(char) in font_glyphs:
@@ -3210,14 +3256,15 @@ class FPDF(GraphicsStateMixin, TextRegionMixin):
             else:
                 if txt_frag:
                     fragments.append(
-                        Fragment(txt_frag, self._get_current_graphics_state(), self.k)
+                        Fragment(txt_frag, self._get_current_graphics_state(), self.k,
+                                 link=link, fill_background=fill_background)
                     )
                     txt_frag = []
                 fallback_font = self.get_fallback_font(char, self.font_style)
                 if fallback_font:
                     gstate = self._get_current_graphics_state()
                     gstate["font_family"] = fallback_font
-                    frag = Fragment(char, gstate, self.k)
+                    frag = Fragment(char, gstate, self.k, link=link, fill_background=fill_background)
                     frag.font = self.fonts[fallback_font]
                     fragments.append(frag)
                 else:
@@ -3226,7 +3273,8 @@ class FPDF(GraphicsStateMixin, TextRegionMixin):
                     txt_frag.append(char)
         if txt_frag:
             fragments.append(
-                Fragment(txt_frag, self._get_current_graphics_state(), self.k)
+                Fragment(txt_frag, self._get_current_graphics_state(), self.k,
+                         link=link, fill_background=fill_background)
             )
         return tuple(fragments)
 
@@ -3737,9 +3785,55 @@ class FPDF(GraphicsStateMixin, TextRegionMixin):
             return return_value[0]
         return return_value
 
+    def split_text_shaped(self, first_width: float, width: float, text: str, align: Align,
+                          link: str, fill_background: bool = False) -> List[TextLine]:
+        """
+        Optimized version of `multi_cell` with `dry_run=True` to split a text into lines, including
+        support for text shaping.
+        :param first_width: width of first line
+        :param width: line width except first one (set with first_width)
+        :param text: text to split
+        :param align: alignment of text
+        :param link: optional link to set for given text
+        :param fill_background: True if background area of text is to be filled with current fill_color
+        :return: list of parsed text lines.
+        """
+        if not self.font_family:
+            raise FPDFException("No font set, you need to call set_font() beforehand")
+
+        # Calculate text length
+        text = self.normalize_text(text)
+        normalized_string = text.replace("\r", "")
+        styled_text_fragments = self._preload_font_styles(
+            normalized_string, markdown=False, link=link, fill_background=fill_background)
+
+        text_lines = []
+        multi_line_break = MultiLineBreak(
+            styled_text_fragments,
+            # width of first line could be different with rich text where a line is
+            # divided into parts (with different styles)
+            max_width=first_width,
+            margins=[self.c_margin, self.c_margin],
+            align=align,
+        )
+        if first_width < width:
+            # if width of first line is smaller than standard width (possible for rich text starting after
+            # previous text part) then the first line can be empty
+            multi_line_break.set_allow_forced_break(False)
+        text_line = multi_line_break.get_line()
+        # set max width for all following lines
+        multi_line_break.set_width(width)
+        multi_line_break.set_allow_forced_break(True)
+        while text_line is not None:
+            text_lines.append(text_line)
+            text_line = multi_line_break.get_line()
+        return text_lines
+
     def split_text(self, first_w, w, txt) -> Tuple[str, int, bool]:
         """
         Optimized version of `multi_cell` with `split_only=True` to split a text into lines.
+
+        This is an older implementation without support for text shaping.
         :param first_w: width of first line
         :param w: line width except first one (set with first_w)
         :param txt: text to split
