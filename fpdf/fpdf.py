@@ -3072,6 +3072,7 @@ class FPDF(GraphicsStateMixin, TextRegionMixin):
                     self.x + dx + s_width,
                     self.y + (0.5 * h + 0.3 * max_font_size),
                     self.h,
+                    self.encode_error_handling,
                 )
                 if r_text:
                     sl.append(r_text)

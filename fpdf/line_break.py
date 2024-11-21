@@ -211,21 +211,29 @@ class Fragment:
             character = HYPHEN
         return self.get_width(chars=character, initial_cs=initial_cs)
 
-    def render_pdf_text(self, frag_ws, current_ws, word_spacing, adjust_x, adjust_y, h):
+    def render_pdf_text(self, frag_ws, current_ws, word_spacing, adjust_x, adjust_y, h, encode_error_handling):
         if self.is_ttf_font:
             if self._text_shaping:
                 return self.render_with_text_shaping(
                     adjust_x, adjust_y, h, word_spacing, self._text_shaping
                 )
-            return self.render_pdf_text_ttf(frag_ws, word_spacing)
+            return self.render_pdf_text_ttf(frag_ws, word_spacing, encode_error_handling)
         return self.render_pdf_text_core(frag_ws, current_ws)
 
-    def render_pdf_text_ttf(self, frag_ws, word_spacing):
+    def render_pdf_text_ttf(self, frag_ws, word_spacing, encode_error_handling):
         ret = ""
         mapped_text = ""
         for char in self.string:
             mapped_char = self.font.subset.pick(ord(char))
-            if mapped_char:
+            if mapped_char is None:
+                if encode_error_handling == 'strict':
+                    raise FPDFException(f"Character {char} is not contained in current font")
+                elif encode_error_handling == 'replace':
+                    if self.font.qm_char_code is None:
+                        raise FPDFException(f"? (to replace missing character {char}) is not contained in current font")
+                    mapped_text += chr(self.font.qm_char_code)
+                # ignore character with encode_error_handling == 'ignore'
+            else:
                 mapped_text += chr(mapped_char)
         if word_spacing:
             # do this once in advance
