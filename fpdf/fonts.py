@@ -117,7 +117,7 @@ class CoreFont:
 
     # Disabling this check - method kept as is to have same method/signature on CoreConf and TTFFont:
     # pylint: disable=no-self-use
-    def encode_text(self, text, encode_error_handling):
+    def encode_text(self, text):
         return f"({escape_parens(text)}) Tj"
 
     def __repr__(self):
@@ -144,6 +144,7 @@ class TTFFont:
         "ttfont",
         "missing_glyphs",
         "qm_char_code",
+        "encode_error_handling",
     )
 
     def __init__(self, fpdf, font_file_path, fontkey, style):
@@ -233,6 +234,8 @@ class TTFFont:
         self.subset = SubsetMap(self, [ord(char) for char in sbarr])
         # char code for question mark, needed when missing character is replaced with "?"
         self.qm_char_code = self.subset.pick(ord('?'))
+        # defines how to handle missing glyph in font ('strict', 'ignore' or 'replace')
+        self.encode_error_handling = fpdf.encode_error_handling
 
     def __repr__(self):
         return f"TTFFont(i={self.i}, fontkey={self.fontkey})"
@@ -244,7 +247,18 @@ class TTFFont:
     def get_text_width(self, text, font_size_pt, text_shaping_parms):
         if text_shaping_parms:
             return self.shaped_text_width(text, font_size_pt, text_shaping_parms)
-        return (len(text), sum(self.cw[ord(c)] for c in text) * font_size_pt * 0.001)
+        printed_char_count = 0
+        sum_cw = 0
+        for c in text:
+            ord_c = ord(c)
+            if ord_c in self.cw:
+                printed_char_count += 1
+                sum_cw += self.cw[ord_c]
+            else:
+                if self.encode_error_handling == 'replace':
+                    printed_char_count += 1
+                    sum_cw += self.cw[ord('?')]
+        return printed_char_count, sum_cw * font_size_pt * 0.001
 
     def shaped_text_width(self, text, font_size_pt, text_shaping_parms):
         """
@@ -295,7 +309,7 @@ class TTFFont:
         hb.shape(self.hbfont, buf, features)
         return buf.glyph_infos, buf.glyph_positions
 
-    def encode_text(self, text, encode_error_handling):
+    def encode_text(self, text):
         txt_mapped = ""
         for char in text:
             uni = ord(char)
@@ -303,9 +317,9 @@ class TTFFont:
             # mapped to a position in the font's subset
             char_code = self.subset.pick(uni)
             if char_code is None:
-                if encode_error_handling == 'strict':
+                if self.encode_error_handling == 'strict':
                     raise FPDFException(f"Character {char} is not contained in current font")
-                elif encode_error_handling == 'replace':
+                elif self.encode_error_handling == 'replace':
                     if self.qm_char_code is None:
                         raise FPDFException(f"? (to replace missing character {char}) is not contained in current font")
                     txt_mapped += chr(self.qm_char_code)
