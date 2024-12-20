@@ -23,7 +23,7 @@ except ImportError:
 
 from .drawing import convert_to_device_color, DeviceGray, DeviceRGB
 from .enums import FontDescriptorFlags, TextEmphasis
-from .errors import FPDFException
+from .errors import FPDFException, FPDFMissingGlyphException
 from .syntax import Name, PDFObject
 from .util import escape_parens
 
@@ -255,9 +255,12 @@ class TTFFont:
                 printed_char_count += 1
                 sum_cw += self.cw[ord_c]
             else:
-                if self.encode_error_handling == 'replace':
+                if self.encode_error_handling == 'strict':
+                    raise FPDFMissingGlyphException(character=c, font_name=self.fontkey)
+                elif self.encode_error_handling == 'replace':
                     printed_char_count += 1
                     sum_cw += self.cw[ord('?')]
+                # ignore character with encode_error_handling == 'ignore'
         return printed_char_count, sum_cw * font_size_pt * 0.001
 
     def shaped_text_width(self, text, font_size_pt, text_shaping_parms):
@@ -318,10 +321,10 @@ class TTFFont:
             char_code = self.subset.pick(uni)
             if char_code is None:
                 if self.encode_error_handling == 'strict':
-                    raise FPDFException(f"Character {char} is not contained in current font")
+                    raise FPDFMissingGlyphException(character=char, font_name=self.fontkey)
                 elif self.encode_error_handling == 'replace':
                     if self.qm_char_code is None:
-                        raise FPDFException(f"? (to replace missing character {char}) is not contained in current font")
+                        raise FPDFMissingGlyphException(character='?', font_name=self.fontkey)
                     txt_mapped += chr(self.qm_char_code)
                 # ignore character with encode_error_handling == 'ignore'
             else:

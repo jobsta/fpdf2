@@ -2,6 +2,21 @@ class FPDFException(Exception):
     pass
 
 
+class FPDFMissingGlyphException(FPDFException):
+    """Error is thrown when a glyph is missing in a TrueType Font"""
+
+    def __init__(self, character, font_name):
+        super().__init__()
+        self.character = character
+        self.font_name = font_name
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({repr(self.character), repr(self.font_name)})"
+
+    def __str__(self):
+        return f'Character "{self.character}" is not included in the TrueType font used: "{self.font_name}".'
+
+
 class FPDFPageFormatException(FPDFException):
     """Error is thrown when a bad page format is given"""
 
