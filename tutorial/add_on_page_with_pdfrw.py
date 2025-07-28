@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# USAGE: ./add_on_page_with_pdfrw.py src_file.pdf dest_file.pdf
 import sys
 from fpdf import FPDF
 from pdfrw import PageMerge, PdfReader, PdfWriter
@@ -7,9 +8,8 @@ from pdfrw.pagemerge import RectXObj
 IN_FILEPATH = sys.argv[1]
 OUT_FILEPATH = sys.argv[2]
 ON_PAGE_INDEX = 1
-UNDERNEATH = (
-    False  # if True, new content will be placed underneath page (painted first)
-)
+# if True, new content will be placed underneath page (painted first):
+UNDERNEATH = False
 
 reader = PdfReader(IN_FILEPATH)
 area = RectXObj(reader.pages[0])
@@ -26,7 +26,8 @@ def new_content():
 
 writer = PdfWriter()
 writer.pagearray = reader.Root.Pages.Kids
-writer.pagearray = writer.pagearray[0].Kids
+if writer.pagearray[0].Kids:
+    writer.pagearray = writer.pagearray[0].Kids
 PageMerge(writer.pagearray[ON_PAGE_INDEX]).add(
     new_content(), prepend=UNDERNEATH
 ).render()

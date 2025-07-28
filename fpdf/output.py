@@ -6,38 +6,46 @@ The contents of this module are internal to fpdf2, and not part of the public AP
 They may change at any time without prior warning or any deprecation period,
 in non-backward-compatible ways.
 """
+
 # pylint: disable=protected-access
 import logging
-from collections import defaultdict, OrderedDict
+from collections import OrderedDict, defaultdict
 from contextlib import contextmanager
 from io import BytesIO
 
+from fontTools import subset as ftsubset
+
 from .annotations import PDFAnnotation
-from .enums import SignatureFlag
+from .enums import PDFResourceType, PageLabelStyle, SignatureFlag
+from .enums import OutputIntentSubType
 from .errors import FPDFException
+from .line_break import TotalPagesSubstitutionFragment
 from .image_datastructures import RasterImageInfo
 from .outline import build_outline_objs
 from .sign import Signature, sign_content
 from .syntax import (
-    build_obj_dict,
     Name,
     PDFArray,
     PDFContentStream,
     PDFDate,
     PDFObject,
     PDFString,
+    build_obj_dict,
 )
 from .syntax import create_dictionary_string as pdf_dict
 from .syntax import create_list_string as pdf_list
 from .syntax import iobj_ref as pdf_ref
-
-from fontTools import subset as ftsubset
+from .util import int2roman, int_to_letters
 
 try:
     from endesive import signer
 except ImportError:
     signer = None
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .fpdf import FPDF
 
 LOGGER = logging.getLogger(__name__)
 
@@ -138,16 +146,19 @@ class PDFCatalog(PDFObject):
         self.metadata = None
         self.names = None
         self.outlines = None
+        self.output_intents = None
         self.struct_tree_root = None
 
 
 class PDFResources(PDFObject):
-    def __init__(self, proc_set, font, x_object, ext_g_state):
+    def __init__(self, proc_set, font, x_object, ext_g_state, shading, pattern):
         super().__init__()
         self.proc_set = proc_set
         self.font = font
         self.x_object = x_object
         self.ext_g_state = ext_g_state
+        self.shading = shading
+        self.pattern = pattern
 
 
 class PDFFontStream(PDFContentStream):
@@ -205,7 +216,14 @@ class PDFXObject(PDFContentStream):
         self.s_mask = None
 
 
-class PDFICCPObject(PDFContentStream):
+class PDFICCProfile(PDFContentStream):
+    """holds values for ICC Profile Stream
+    Args:
+        contents (str): stream content
+        n (int): [1|3|4], # the numbers for colors 1=Gray, 3=RGB, 4=CMYK
+        alternate (str): ['DeviceGray'|'DeviceRGB'|'DeviceCMYK']
+    """
+
     __slots__ = (  # RAM usage optimization
         "_id",
         "_contents",
@@ -226,6 +244,55 @@ class PDFICCPObject(PDFContentStream):
         self.alternate = Name(alternate)
 
 
+class PDFPageLabel:
+    __slots__ = ("_style", "_prefix", "st")  # RAM usage optimization
+
+    def __init__(
+        self, label_style: PageLabelStyle, label_prefix: str, label_start: int
+    ):
+        self._style: PageLabelStyle = label_style
+        self._prefix: str = label_prefix
+        self.st: int = label_start
+
+    @property
+    def s(self) -> Name:
+        return Name(self._style.value) if self._style else None
+
+    @property
+    def p(self) -> PDFString:
+        return PDFString(self._prefix) if self._prefix else None
+
+    def __repr__(self):
+        return f"PDFPageLabel({self._style}, {self._prefix}, {self.st})"
+
+    def __str__(self):
+        ret = self._prefix if self._prefix else ""
+        if self._style:
+            if self._style == PageLabelStyle.NUMBER:
+                ret += str(self.st)
+            elif self._style == PageLabelStyle.UPPER_ROMAN:
+                ret += int2roman(self.st)
+            elif self._style == PageLabelStyle.LOWER_ROMAN:
+                ret += int2roman(self.st).lower()
+            elif self._style == PageLabelStyle.UPPER_LETTER:
+                ret += int_to_letters(self.st - 1)
+            elif self._style == PageLabelStyle.LOWER_LETTER:
+                ret += int_to_letters(self.st - 1).lower()
+        return ret
+
+    def serialize(self) -> dict:
+        return build_obj_dict({key: getattr(self, key) for key in dir(self)})
+
+    def get_style(self) -> PageLabelStyle:
+        return self._style
+
+    def get_prefix(self) -> str:
+        return self._prefix
+
+    def get_start(self) -> int:
+        return self.st
+
+
 class PDFPage(PDFObject):
     __slots__ = (  # RAM usage optimization
         "_id",
@@ -242,6 +309,8 @@ class PDFPage(PDFObject):
         "_index",
         "_width_pt",
         "_height_pt",
+        "_page_label",
+        "_text_substitution_fragments",
     )
 
     def __init__(
@@ -262,11 +331,17 @@ class PDFPage(PDFObject):
         self.struct_parents = None
         self.resources = None  # must always be set before calling .serialize()
         self.parent = None  # must always be set before calling .serialize()
+        # Useful properties that will not be serialized in the final PDF document:
         self._index = index
         self._width_pt, self._height_pt = None, None
+        self._page_label: PDFPageLabel = None
+        self._text_substitution_fragments: list[TotalPagesSubstitutionFragment] = []
 
     def index(self):
         return self._index
+
+    def set_index(self, i):
+        self._index = i
 
     def dimensions(self):
         "Return a pair (width, height) in the unit specified to FPDF constructor"
@@ -275,6 +350,43 @@ class PDFPage(PDFObject):
     def set_dimensions(self, width_pt, height_pt):
         "Accepts a pair (width, height) in the unit specified to FPDF constructor"
         self._width_pt, self._height_pt = width_pt, height_pt
+
+    def set_page_label(
+        self, previous_page_label: PDFPageLabel, page_label: PDFPageLabel
+    ):
+        if (
+            previous_page_label
+            and page_label
+            and page_label.get_style() == previous_page_label.get_style()
+            and page_label.get_prefix() == previous_page_label.get_prefix()
+            and not page_label.st
+        ):
+            page_label.st = previous_page_label.get_start() + 1
+
+        if page_label:
+            if not page_label.get_start():
+                page_label.st = 1
+
+        if previous_page_label and not page_label:
+            page_label = PDFPageLabel(
+                previous_page_label.get_style(),
+                previous_page_label.get_prefix(),
+                previous_page_label.get_start() + 1,
+            )
+
+        self._page_label = page_label
+
+    def get_page_label(self) -> PDFPageLabel:
+        return self._page_label
+
+    def get_label(self) -> str:
+        return str(self.index()) if not self._page_label else str(self._page_label)
+
+    def get_text_substitutions(self):
+        return self._text_substitution_fragments
+
+    def add_text_substitution(self, fragment):
+        self._text_substitution_fragments.append(fragment)
 
 
 class PDFPagesRoot(PDFObject):
@@ -297,6 +409,8 @@ class PDFExtGState(PDFObject):
 
 
 class PDFXrefAndTrailer(ContentWithoutID):
+    "Cross-reference table & file trailer"
+
     def __init__(self, output_builder):
         self.output_builder = output_builder
         self.count = output_builder.obj_id + 1
@@ -336,10 +450,120 @@ class PDFXrefAndTrailer(ContentWithoutID):
         return "\n".join(out)
 
 
+class OutputIntentDictionary:
+    """The optional OutputIntents (PDF 1.4) entry in the document
+    catalog dictionary holds an array of output intent dictionaries,
+    each describing the colour reproduction characteristics of a possible
+    output device.
+
+    Args:
+        subtype (OutputIntentSubType, required): PDFA, PDFX or ISOPDF
+        output_condition_identifier (str, required): see the Name in
+            https://www.color.org/registry.xalter
+        output_condition (str, optional): see the Definition in
+            https://www.color.org/registry.xalter
+        registry_name (str, optional): "https://www.color.org"
+        dest_output_profile (PDFICCProfile, required/optional):
+            PDFICCProfile | None # (required if
+            output_condition_identifier does not specify a standard
+            production condition; optional otherwise)
+        info (str, required/optional see dest_output_profile): human
+            readable description of profile
+    """
+
+    __slots__ = (  # RAM usage optimization
+        "type",
+        "s",
+        "output_condition_identifier",
+        "output_condition",
+        "registry_name",
+        "dest_output_profile",
+        "info",
+    )
+
+    def __init__(
+        self,
+        subtype: "OutputIntentSubType | str",
+        output_condition_identifier: str,
+        output_condition: str = None,
+        registry_name: str = None,
+        dest_output_profile: PDFICCProfile = None,
+        info: str = None,
+    ):
+        self.type = Name("OutputIntent")
+        self.s = Name(OutputIntentSubType.coerce(subtype).value)
+        self.output_condition_identifier = (
+            PDFString(output_condition_identifier)
+            if output_condition_identifier
+            else None
+        )
+        self.output_condition = (
+            PDFString(output_condition) if output_condition else None
+        )
+        self.registry_name = PDFString(registry_name) if registry_name else None
+        self.dest_output_profile = (
+            dest_output_profile
+            if dest_output_profile and isinstance(dest_output_profile, PDFICCProfile)
+            else None
+        )
+        self.info = PDFString(info) if info else None
+
+    def serialize(self, _security_handler=None, _obj_id=None):
+        obj_dict = build_obj_dict(
+            {key: getattr(self, key) for key in dir(self)},
+            _security_handler=_security_handler,
+            _obj_id=_obj_id,
+        )
+        return pdf_dict(obj_dict)
+
+
+class ResourceCatalog:
+    "Manage the indexing of resources and association to the pages they are used"
+
+    def __init__(self):
+        self.resources = defaultdict(dict)
+        self.resources_per_page = defaultdict(set)
+
+    def add(self, resource_type: PDFResourceType, resource, page_number: int):
+        if resource_type in (PDFResourceType.PATTERN, PDFResourceType.SHADDING):
+            registry = self.resources[resource_type]
+            if resource not in registry:
+                registry[resource] = (
+                    f"{self._get_prefix(resource_type)}{len(registry) + 1}"
+                )
+            self.resources_per_page[(page_number, resource_type)].add(
+                registry[resource]
+            )
+            return registry[resource]
+        self.resources_per_page[(page_number, resource_type)].add(resource)
+        return None
+
+    def get_items(self, resource_type: PDFResourceType):
+        return self.resources[resource_type].items()
+
+    def get_resources_per_page(self, page_number: int, resource_type: PDFResourceType):
+        return self.resources_per_page[(page_number, resource_type)]
+
+    def get_used_resources(self, resource_type: PDFResourceType):
+        unique = set()
+        for (_, rtype), resource in self.resources_per_page.items():
+            if rtype == resource_type:
+                unique.update(resource)
+        return unique
+
+    @classmethod
+    def _get_prefix(cls, resource_type: PDFResourceType):
+        if resource_type == PDFResourceType.PATTERN:
+            return "P"
+        if resource_type == PDFResourceType.SHADDING:
+            return "Sh"
+        raise ValueError(f"No prefix for resource type {resource_type}")
+
+
 class OutputProducer:
     "Generates the final bytearray representing the PDF document, based on a FPDF instance."
 
-    def __init__(self, fpdf):
+    def __init__(self, fpdf: "FPDF"):
         self.fpdf = fpdf
         self.pdf_objs = []
         self.iccp_i_to_pdf_i = {}
@@ -365,28 +589,30 @@ class OutputProducer:
             # get the file_id and generate passwords needed to encrypt streams and strings
             file_id = fpdf.file_id()
             if file_id == -1:
-                # no custom file id - use default file id so enryption passwords can be generated
+                # no custom file id - use default file id so encryption passwords can be generated
                 file_id = fpdf._default_file_id(bytearray(0x00))
             fpdf._security_handler.generate_passwords(file_id)
 
-        self.pdf_objs.append(PDFHeader(fpdf.pdf_version))
+        pdf_version = fpdf.pdf_version
+        if (
+            fpdf.viewer_preferences
+            and fpdf.viewer_preferences._min_pdf_version > pdf_version
+        ):
+            pdf_version = fpdf.viewer_preferences._min_pdf_version
+        self.pdf_objs.append(PDFHeader(pdf_version))
         pages_root_obj = self._add_pages_root()
         catalog_obj = self._add_catalog()
         page_objs = self._add_pages()
         sig_annotation_obj = self._add_annotations_as_objects()
         for embedded_file in fpdf.embedded_files:
             self._add_pdf_obj(embedded_file, "embedded_files")
-        font_objs_per_index = self._add_fonts()
-        img_objs_per_index = self._add_images()
-        gfxstate_objs_per_name = self._add_gfxstates()
-        resources_dict_obj = self._add_resources_dict(
-            font_objs_per_index, img_objs_per_index, gfxstate_objs_per_name
-        )
+        self._insert_resources(page_objs)
         struct_tree_root_obj = self._add_structure_tree()
         outline_dict_obj, outline_items = self._add_document_outline()
         xmp_metadata_obj = self._add_xmp_metadata()
         info_obj = self._add_info()
         encryption_obj = self._add_encryption()
+
         xref = PDFXrefAndTrailer(self)
         self.pdf_objs.append(xref)
 
@@ -404,7 +630,6 @@ class OutputProducer:
         dests = []
         for page_obj in page_objs:
             page_obj.parent = pages_root_obj
-            page_obj.resources = resources_dict_obj
             for annot in page_obj.annots:
                 page_dests = []
                 if annot.dest:
@@ -492,10 +717,19 @@ class OutputProducer:
         self._add_pdf_obj(pages_root_obj)
         return pages_root_obj
 
+    def _iter_pages_in_order(self):
+        for page_index in range(1, self.fpdf.pages_count + 1):
+            page_obj = self.fpdf.pages[page_index]
+            # Defensive check:
+            assert (
+                page_obj.index() == page_index
+            ), f"{page_obj.index()=} != {page_index=}"
+            yield page_obj
+
     def _add_pages(self, _slice=slice(0, None)):
         fpdf = self.fpdf
         page_objs = []
-        for page_obj in list(fpdf.pages.values())[_slice]:
+        for page_obj in list(self._iter_pages_in_order())[_slice]:
             if fpdf.pdf_version > "1.3":
                 page_obj.group = pdf_dict(
                     {"/Type": "/Group", "/S": "/Transparency", "/CS": "/DeviceRGB"},
@@ -512,6 +746,7 @@ class OutputProducer:
             )
             self._add_pdf_obj(cs_obj, "pages")
             page_obj.contents = cs_obj
+
         return page_objs
 
     def _add_annotations_as_objects(self):
@@ -549,10 +784,14 @@ class OutputProducer:
                 glyph_names = font.subset.get_all_glyph_names()
 
                 if len(font.missing_glyphs) > 0:
+                    msg = ", ".join(
+                        f"'{chr(x)}' ({chr(x).encode('unicode-escape').decode()})"
+                        for x in font.missing_glyphs[:10]
+                    )
+                    if len(font.missing_glyphs) > 10:
+                        msg += f", ... (and {len(font.missing_glyphs) - 10} others)"
                     LOGGER.warning(
-                        "Font %s is missing the following glyphs: %s",
-                        fontname,
-                        ", ".join(chr(x) for x in font.missing_glyphs),
+                        "Font %s is missing the following glyphs: %s", fontname, msg
                     )
 
                 # 2. make a subset
@@ -565,11 +804,21 @@ class OutputProducer:
                     "GDEF",  # Glyph Definition table = various glyph properties used in OpenType layout processing
                     "GPOS",  # Glyph Positioning table = precise control over glyph placement
                     #          for sophisticated text layout and rendering in each script and language system
-                    "GSUB",  # Glyph Substitution table = data for substition of glyphs for appropriate rendering of scripts
+                    "GSUB",  # Glyph Substitution table = data for substitution of glyphs for appropriate rendering of scripts
                     "MATH",  # Mathematical typesetting table = specific information necessary for math formula layout
                     "hdmx",  # Horizontal Device Metrics table, stores integer advance widths scaled to particular pixel sizes
                     #          for OpenType™ fonts with TrueType outlines
                     "meta",  # metadata table
+                    "sbix",  # Apple's SBIX table, used for color bitmap glyphs
+                    "CBDT",  # Color Bitmap Data Table
+                    "CBLC",  # Color Bitmap Location Table
+                    "EBDT",  # Embedded Bitmap Data Table
+                    "EBLC",  # Embedded Bitmap Location Table
+                    "EBSC",  # Embedded Bitmap Scaling Table
+                    "SVG ",  # SVG table
+                    "CPAL",  # Color Palette table
+                    "COLR",  # Color table
+                    "fvar",  # Font Variations table
                 ]
                 subsetter = ftsubset.Subsetter(options)
                 subsetter.populate(glyphs=glyph_names)
@@ -687,6 +936,8 @@ class OutputProducer:
                 self._add_pdf_obj(font_file_cs_obj, "fonts")
                 font_descriptor_obj.font_file2 = font_file_cs_obj
 
+                font.subset.pick.cache_clear()
+                font.subset.get_glyph.cache_clear()
                 font.close()
 
         return font_objs_per_index
@@ -715,7 +966,7 @@ class OutputProducer:
                 break
         assert iccp_content is not None
         # Note: n should be 4 if the profile ColorSpace is CMYK
-        iccp_obj = PDFICCPObject(
+        iccp_obj = PDFICCProfile(
             contents=iccp_content, n=img_info["dpn"], alternate=img_info["cs"]
         )
         iccp_pdf_i = self._add_pdf_obj(iccp_obj, "iccp")
@@ -784,8 +1035,93 @@ class OutputProducer:
             gfxstate_objs_per_name[name] = gfxstate_obj
         return gfxstate_objs_per_name
 
+    def _add_shadings(self):
+        shading_objs_per_name = OrderedDict()
+        for shading, name in self.fpdf._resource_catalog.get_items(
+            PDFResourceType.SHADDING
+        ):
+            for function in shading.functions:
+                self._add_pdf_obj(function, "function")
+            shading_obj = shading.get_shading_object()
+            self._add_pdf_obj(shading_obj, "shading")
+            shading_objs_per_name[name] = shading_obj
+        return shading_objs_per_name
+
+    def _add_patterns(self):
+        pattern_objs_per_name = OrderedDict()
+        for pattern, name in self.fpdf._resource_catalog.get_items(
+            PDFResourceType.PATTERN
+        ):
+            self._add_pdf_obj(pattern, "pattern")
+            pattern_objs_per_name[name] = pattern
+        return pattern_objs_per_name
+
+    def _insert_resources(self, page_objs):
+        font_objs_per_index = self._add_fonts()
+        img_objs_per_index = self._add_images()
+        gfxstate_objs_per_name = self._add_gfxstates()
+        shading_objs_per_name = self._add_shadings()
+        pattern_objs_per_name = self._add_patterns()
+        # Insert /Resources dicts:
+        if self.fpdf.single_resources_object:
+            resources_dict_obj = self._add_resources_dict(
+                font_objs_per_index,
+                img_objs_per_index,
+                gfxstate_objs_per_name,
+                shading_objs_per_name,
+                pattern_objs_per_name,
+            )
+            for page_obj in page_objs:
+                page_obj.resources = resources_dict_obj
+        else:
+            for page_number, page_obj in enumerate(page_objs, start=1):
+                page_font_objs_per_index = {
+                    font_id: font_objs_per_index[font_id]
+                    for font_id in self.fpdf._resource_catalog.get_resources_per_page(
+                        page_number, PDFResourceType.FONT
+                    )
+                }
+                page_img_objs_per_index = {
+                    img_id: img_objs_per_index[img_id]
+                    for img_id in self.fpdf._resource_catalog.get_resources_per_page(
+                        page_number, PDFResourceType.X_OBJECT
+                    )
+                }
+                page_gfxstate_objs_per_name = {
+                    gfx_name: gfx_state
+                    for (gfx_name, gfx_state) in gfxstate_objs_per_name.items()
+                    if gfx_name
+                    in self.fpdf._resource_catalog.get_resources_per_page(
+                        page_number, PDFResourceType.EXT_G_STATE
+                    )
+                }
+                page_shading_objs_per_name = {
+                    shading_name: shading_objs_per_name[shading_name]
+                    for shading_name in self.fpdf._resource_catalog.get_resources_per_page(
+                        page_number, PDFResourceType.SHADDING
+                    )
+                }
+                page_pattern_objs_per_name = {
+                    pattern_name: pattern_objs_per_name[pattern_name]
+                    for pattern_name in self.fpdf._resource_catalog.get_resources_per_page(
+                        page_number, PDFResourceType.PATTERN
+                    )
+                }
+                page_obj.resources = self._add_resources_dict(
+                    page_font_objs_per_index,
+                    page_img_objs_per_index,
+                    page_gfxstate_objs_per_name,
+                    page_shading_objs_per_name,
+                    page_pattern_objs_per_name,
+                )
+
     def _add_resources_dict(
-        self, font_objs_per_index, img_objs_per_index, gfxstate_objs_per_name
+        self,
+        font_objs_per_index,
+        img_objs_per_index,
+        gfxstate_objs_per_name,
+        shading_objs_per_name,
+        pattern_objs_per_name,
     ):
         # From section 10.1, "Procedure Sets", of PDF 1.7 spec:
         # > Beginning with PDF 1.4, this feature is considered obsolete.
@@ -793,7 +1129,7 @@ class OutputProducer:
         # > PDF producer applications should continue to specify procedure sets
         # > (preferably, all of those listed in Table 10.1).
         proc_set = "[/PDF /Text /ImageB /ImageC /ImageI]"
-        font, x_object, ext_g_state = None, None, None
+        font, x_object, ext_g_state, shading, pattern = None, None, None, None, None
 
         if font_objs_per_index:
             font = pdf_dict(
@@ -818,9 +1154,29 @@ class OutputProducer:
                     for name, gfxstate_obj in gfxstate_objs_per_name.items()
                 }
             )
+        if shading_objs_per_name:
+            shading = pdf_dict(
+                {
+                    f"/{name}": pdf_ref(shading_obj.id)
+                    for name, shading_obj in sorted(shading_objs_per_name.items())
+                }
+            )
+
+        if pattern_objs_per_name:
+            pattern = pdf_dict(
+                {
+                    f"/{name}": pdf_ref(pattern_obj.id)
+                    for name, pattern_obj in sorted(pattern_objs_per_name.items())
+                }
+            )
 
         resources_obj = PDFResources(
-            proc_set=proc_set, font=font, x_object=x_object, ext_g_state=ext_g_state
+            proc_set=proc_set,
+            font=font,
+            x_object=x_object,
+            ext_g_state=ext_g_state,
+            shading=shading,
+            pattern=pattern,
         )
         self._add_pdf_obj(resources_obj)
         return resources_obj
@@ -867,7 +1223,7 @@ class OutputProducer:
                     f"Could not format date: {fpdf.creation_date}"
                 ) from error
         info_obj = PDFInfo(
-            title=getattr(fpdf, "title", None),
+            title=fpdf.title,
             subject=getattr(fpdf, "subject", None),
             author=getattr(fpdf, "author", None),
             keywords=getattr(fpdf, "keywords", None),
@@ -886,6 +1242,16 @@ class OutputProducer:
             return pdf_obj
         return None
 
+    def _add_output_intents(self):
+        """should be added in _add_catalog"""
+        output_intents = self.fpdf.output_intents
+        if not output_intents:
+            return None
+        for output_intent in output_intents:
+            if output_intent.dest_output_profile:
+                self._add_pdf_obj(output_intent.dest_output_profile)
+        return PDFArray(output_intents)
+
     def _add_catalog(self):
         fpdf = self.fpdf
         catalog_obj = PDFCatalog(
@@ -894,6 +1260,8 @@ class OutputProducer:
             page_mode=fpdf.page_mode,
             viewer_preferences=fpdf.viewer_preferences,
         )
+        catalog_obj.output_intents = self._add_output_intents()
+
         self._add_pdf_obj(catalog_obj)
         return catalog_obj
 
@@ -941,6 +1309,18 @@ class OutputProducer:
             ]
             catalog_obj.names = pdf_dict(
                 {"/EmbeddedFiles": pdf_dict({"/Names": pdf_list(file_spec_names)})}
+            )
+        page_labels = [
+            f"{i} {pdf_dict(page.get_page_label().serialize())}"
+            for i, page in enumerate(self._iter_pages_in_order())
+            if page.get_page_label()
+        ]
+        if page_labels and not fpdf.pages[1].get_page_label():
+            # If page labels are used, an entry for sequence 0 is mandatory
+            page_labels.insert(0, "0 <<>>")
+        if page_labels:
+            catalog_obj.page_labels = pdf_dict(
+                {"/Nums": PDFArray(page_labels).serialize()}
             )
 
     @contextmanager

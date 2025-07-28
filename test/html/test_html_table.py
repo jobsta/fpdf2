@@ -127,7 +127,7 @@ def test_html_table_with_imgs_captions_and_colspan(caplog, tmp_path):
     pdf = FPDF()
     pdf.add_page()
     pdf.write_html(
-        """<table border="1">
+        """<table border="0">
         <tr>
             <td colspan="2" align="center"><b>Side by side centered pictures and captions</b></td>
         </tr>
@@ -144,9 +144,7 @@ def test_html_table_with_imgs_captions_and_colspan(caplog, tmp_path):
         )
     )
     assert_pdf_equal(
-        pdf,
-        HERE / "html_table_with_imgs_captions_and_colspan.pdf",
-        tmp_path,
+        pdf, HERE / "html_table_with_imgs_captions_and_colspan.pdf", tmp_path
     )
     assert (
         'Ignoring width="50%" specified on a <td> that is not in the first <tr>'
@@ -353,5 +351,54 @@ def test_html_table_with_data_that_contains_entity_names(tmp_path):  # issue 101
     assert_pdf_equal(
         pdf,
         HERE / "html_table_with_data_that_contains_entity_names.pdf",
+        tmp_path,
+    )
+
+
+def test_html_table_honoring_align(tmp_path):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.write_html(
+        """<table>
+          <tr>
+            <th align="right">Foo</th>
+            <th align="center">Bar</th>
+            <th align="left">Baz</th>
+          </tr>
+          <tr>
+            <td align="right">Foo</td>
+            <td align="center">Bar</td>
+            <td align="left">Baz</td>
+          </tr>
+        </table>"""
+    )
+    assert_pdf_equal(pdf, HERE / "html_table_honoring_align.pdf", tmp_path)
+
+
+def test_html_table_with_null_text_in_span_cell(tmp_path):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.write_html(
+        """<table border="1">
+        <tr>
+            <td rowspan=2></td>
+            <td>cell 2</td>
+            <td>cell 3</td>
+        </tr>
+        <tr>
+            <td>cell 4</td>
+            <td>cell 5</td>
+        </tr>
+        <tr>
+            <td colspan=2></td>
+            <td>cell 7</td>
+        </tr>
+    </table>
+        """,
+        table_line_separators=True,
+    )
+    assert_pdf_equal(
+        pdf,
+        HERE / "html_table_with_null_text_in_span_cell.pdf",
         tmp_path,
     )

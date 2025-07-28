@@ -9,6 +9,8 @@ This page provides several examples of using `fpdf2` with [`pdfrw`](https://gith
 a great zero-dependency pure Python library dedicated to reading & writing PDFs,
 with numerous examples and a very clean set of classes modelling the PDF internal syntax.
 
+Sadly, this library is not maintained anymore, _cf._ [pmaupin/pdfrw issue #232](https://github.com/pmaupin/pdfrw/issues/232) & [sarnold/pdfrw issue #15](https://github.com/sarnold/pdfrw/issues/15).
+
 ## Adding content onto an existing PDF page
 
 ```python
@@ -36,7 +38,7 @@ from pdfrw import PdfReader
 
 pdf = FPDF()
 pdf.add_page()
-pdf.set_font('times', 'B', 19)
+pdf.set_font('times', style='B', size=19)
 pdf.text(50, 10, 'Hello World!')
 
 reader = PdfReader(io.BytesIO(pdf.output()))

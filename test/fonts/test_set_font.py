@@ -37,7 +37,8 @@ def test_set_unknown_style():
     with pytest.raises(ValueError) as e:
         pdf.set_font("Times", style="bold")
     assert (
-        str(e.value) == "Unknown style provided (only B/I/U letters are allowed): BDLO"
+        str(e.value)
+        == "Unknown style provided (only B/I/S/U letters are allowed): BDLO"
     )
 
 
@@ -50,8 +51,8 @@ def test_set_builtin_font(tmp_path):
             ("",) if font_name in ("symbol", "zapfdingbats") else ("", "B", "I", "BI")
         )
         for j, style in enumerate(styles):
-            pdf.set_font(font_name.capitalize(), style, 36)
-            pdf.set_font(font_name.lower(), style, 36)
+            pdf.set_font(font_name.capitalize(), style, size=36)
+            pdf.set_font(font_name.lower(), style, size=36)
             pdf.text(0, 10 + 40 * i + 10 * j, "Hello World!")
     assert_pdf_equal(pdf, HERE / "fonts_set_builtin_font.pdf", tmp_path)
 
@@ -59,12 +60,12 @@ def test_set_builtin_font(tmp_path):
 def test_issue_66(tmp_path):
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Times", "B", 14)
+    pdf.set_font("Times", style="B", size=14)
     pdf.cell(text="ABC")
     pdf.set_font("Times", size=10)
     pdf.cell(text="DEF")
     # Setting the font to an already used one used to remove the text!
-    pdf.set_font("Times", "B", 14)
+    pdf.set_font("Times", style="B", size=14)
     assert_pdf_equal(pdf, HERE / "fonts_issue_66.pdf", tmp_path)
 
 
@@ -77,8 +78,8 @@ def test_set_font_aliases_as_font():
     for alias, alternative in zip(aliases, alternatives):
         # Test if warning get's emitted
         with pytest.warns(
-            UserWarning,
-            match=f"Substituting font {alias.lower()} by core font {alternative}",
+            DeprecationWarning,
+            match=f"Substituting font {alias.lower()} by core font {alternative} - This is deprecated since v2.7.8, and will soon be removed",
         ) as record:
             pdf.set_font(alias)
 
@@ -87,7 +88,7 @@ def test_set_font_aliases_as_font():
 
         # Test if font family is set correctly
         assert pdf.font_family == alternative
-    # Test if the fonts were added in this order and without duplicats:
+    # Test if the fonts were added in this order and without duplicates:
     # helvetica, courier, times
     assert [*pdf.fonts] == ["helvetica", "courier", "times"]
 

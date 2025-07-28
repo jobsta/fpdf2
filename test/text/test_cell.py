@@ -173,6 +173,31 @@ def test_cell_markdown(tmp_path):
     assert_pdf_equal(pdf, HERE / "cell_markdown.pdf", tmp_path)
 
 
+def test_cell_markdown_escaped(tmp_path):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Times", size=40)
+    pdf.cell(text="**Lo\\rem** \\__Ipsum\\__ \\\\--dolor\\\\--", markdown=True)
+    assert_pdf_equal(pdf, HERE / "cell_markdown_escaped.pdf", tmp_path)
+
+
+def test_cell_markdown_bold_italic(tmp_path):
+    # issue 1094
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Times", size=60)
+    pdf.cell(text="**__Lorem --Ipsum--__**", markdown=True)
+    assert_pdf_equal(pdf, HERE / "cell_markdown_bold_italic.pdf", tmp_path)
+
+
+def test_cell_markdown_bold_italic_escaped(tmp_path):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Times", size=40)
+    pdf.cell(text="**__Lorem \\--Ipsum\\--__**", markdown=True)
+    assert_pdf_equal(pdf, HERE / "cell_markdown_bold_italic_escaped.pdf", tmp_path)
+
+
 def test_cell_markdown_with_ttf_fonts(tmp_path):
     pdf = FPDF()
     pdf.add_page()
@@ -182,6 +207,17 @@ def test_cell_markdown_with_ttf_fonts(tmp_path):
     pdf.set_font("Roboto", size=60)
     pdf.cell(text="**Lorem** __Ipsum__ --dolor--", markdown=True)
     assert_pdf_equal(pdf, HERE / "cell_markdown_with_ttf_fonts.pdf", tmp_path)
+
+
+def test_cell_markdown_with_ttf_fonts_escaped(tmp_path):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.add_font("Roboto", "", FONTS_DIR / "Roboto-Regular.ttf")
+    pdf.add_font("Roboto", "B", FONTS_DIR / "Roboto-Bold.ttf")
+    pdf.add_font("Roboto", "I", FONTS_DIR / "Roboto-Italic.ttf")
+    pdf.set_font("Roboto", size=40)
+    pdf.cell(text="**Lo\\rem** \\__Ipsum\\__ \\\\--dolor\\\\--", markdown=True)
+    assert_pdf_equal(pdf, HERE / "cell_markdown_with_ttf_fonts_escaped.pdf", tmp_path)
 
 
 def test_cell_markdown_missing_ttf_font():
@@ -199,11 +235,14 @@ def test_cell_markdown_bleeding(tmp_path):  # issue 241
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Times", size=60)
-    pdf.cell(text="--Lorem Ipsum dolor--", markdown=True, new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(text="No Markdown", markdown=False, new_x="LMARGIN", new_y="NEXT")
     pdf.cell(text="**Lorem Ipsum dolor**", markdown=True, new_x="LMARGIN", new_y="NEXT")
+    assert pdf.font_style == ""
+    pdf.cell(text="No Markdown", markdown=False, new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(text="--Lorem Ipsum dolor--", markdown=True, new_x="LMARGIN", new_y="NEXT")
+    assert pdf.font_style == ""
     pdf.cell(text="No Markdown", markdown=False, new_x="LMARGIN", new_y="NEXT")
     pdf.cell(text="__Lorem Ipsum dolor__", markdown=True, new_x="LMARGIN", new_y="NEXT")
+    assert pdf.font_style == ""
     pdf.cell(text="No Markdown", markdown=False, new_x="LMARGIN", new_y="NEXT")
     assert_pdf_equal(pdf, HERE / "cell_markdown_bleeding.pdf", tmp_path)
 
@@ -254,10 +293,7 @@ def test_cell_newpos_badinput():
     pdf.add_page()
     pdf.set_font("Times", size=16)
     with pytest.raises(ValueError):
-        with pytest.warns(DeprecationWarning) as record:
-            pdf.cell(w=0, ln=5)
-        assert len(record) == 1
-        assert record[0].filename == __file__
+        pdf.cell(w=0, ln=5)
 
     with pytest.raises(TypeError):
         pdf.cell(w=0, new_x=5)
@@ -273,14 +309,14 @@ def test_cell_curfont_leak(tmp_path):  # issue #475
     pdf.add_font("Roboto", fname=FONTS_DIR / "Roboto-Regular.ttf")
     pdf.add_font("Roboto", style="B", fname=FONTS_DIR / "Roboto-Bold.ttf")
     with pdf.local_context():
-        pdf.set_font("Roboto", "B", 10)
+        pdf.set_font("Roboto", style="B", size=10)
         pdf.cell(text="ABCDEFGH", new_x="LEFT", new_y="NEXT")
-    pdf.set_font("Roboto", "", 10)
+    pdf.set_font("Roboto", size=10)
     pdf.cell(text="IJKLMNOP", new_x="LEFT", new_y="NEXT")
     with pdf.local_context():
-        pdf.set_font("Roboto", "B", 10)
+        pdf.set_font("Roboto", style="B", size=10)
         pdf.cell(text="QRSTUVW", new_x="LEFT", new_y="NEXT")
-    pdf.set_font("Roboto", "", 10)
+    pdf.set_font("Roboto", size=10)
     pdf.cell(text="XYZ012abc,-", new_x="LEFT", new_y="NEXT")
     pdf.cell(text="3,7E-05", new_x="LEFT", new_y="NEXT")
     assert_pdf_equal(pdf, HERE / "cell_curfont_leak.pdf", tmp_path)
@@ -319,7 +355,7 @@ def test_cell_deprecated_txt_arg():
         pdf.cell(txt="Lorem ipsum Ut nostrud irure")
 
 
-@ensure_exec_time_below(seconds=24)
+@ensure_exec_time_below(seconds=18)
 @ensure_rss_memory_below(mib=1)
 def test_cell_speed_with_long_text():  # issue #907
     pdf = FPDF()

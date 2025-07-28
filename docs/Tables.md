@@ -13,7 +13,7 @@ TABLE_DATA = (
     ("Jules", "Smith", "34", "San Juan"),
     ("Mary", "Ramos", "45", "Orlando"),
     ("Carlson", "Banks", "19", "Los Angeles"),
-    ("Lucas", "Cimon", "31", "Saint-Mahturin-sur-Loire"),
+    ("Lucas", "Cimon", "31", "Angers"),
 )
 pdf = FPDF()
 pdf.add_page()
@@ -38,11 +38,18 @@ Result:
 * control over borders: color, width & where they are drawn
 * handle splitting a table over page breaks, with headings repeated
 * control over cell background color
+* control over cell borders
 * control table width & position
 * control over text alignment in cells, globally or per row
 * allow to embed images in cells
+* merge cells across columns and rows
 
 ## Setting table & column widths
+The `col_widths` optional parameter can be provided to configure this.
+
+If a **single number** is provided as `col_widths`, it is interpreted as a **fixed column width in document units**.
+
+If an **array of numbers** is provided as `col_widths`, the values are considered to be **fractions of the full effective page width**, meaning that `col_widths=(1, 1, 2)` is strictly equivalent to `col_widths=(25, 25, 50)`.
 
 ```python
 ...
@@ -90,6 +97,7 @@ Following the CCS standard the padding can be specified using 1,2 3 or 4 values.
 
 ```python
     ...
+red = (255, 0, 0)
 style = FontFace(color=black, fill_color=red)
 with pdf.table(line_height=pdf.font_size, padding=2) as table:
     for irow in range(5):
@@ -113,31 +121,60 @@ left and right is supplied then c_margin is ignored.
 
 _New in [:octicons-tag-24: 2.7.6](https://github.com/PyFPDF/fpdf2/blob/master/CHANGELOG.md)_
 
-Can be set globally or per cell.
-Works the same way as padding, but with the `v_align` parameter.
-
+Can be set globally, per row or per cell, by passing a string or a [VAlign](https://py-pdf.github.io/fpdf2/fpdf/enums.html#fpdf.enums.VAlign) enum value as `v_align`:
 ```python
-
+...
 with pdf.table(v_align=VAlign.M) as table:
     ...
-    row.cell(f"custom v-align", v_align=VAlign.T)  # <-- align to top
+    row.cell(f"custom v-align", v_align="TOP")
 ```
 
 ## Setting row height
-
+First, `line_height` can be provided to set the height of every individual line of text:
 ```python
 ...
 with pdf.table(line_height=2.5 * pdf.font_size) as table:
     ...
 ```
 
+_New in [:octicons-tag-24: 2.8.3](https://github.com/py-pdf/fpdf2/blob/master/CHANGELOG.md)_
+
+Second, a global `min_row_height` can be set,
+or configured per row as `min_height`:
+```python
+...
+with pdf.table(min_row_height=30) as table:
+    row = table.row()
+    row.cell("A")
+    row.cell("B")
+    row = table.row(min_height=50)
+    row.cell("C")
+    row.cell("D")
+```
+
 ## Disable table headings
+
+By default, `fpdf2` considers that the first row of tables contains its headings.
+This can however be disabled:
 
 ```python
 ...
 with pdf.table(first_row_as_headings=False) as table:
     ...
 ```
+
+_New in [:octicons-tag-24: 2.7.9](https://github.com/py-pdf/fpdf2/blob/master/CHANGELOG.md)_
+
+The **repetition** of table headings on every page can also be disabled:
+
+```python
+...
+with pdf.table(repeat_headings=0) as table:
+    ...
+```
+
+`"ON_TOP_OF_EVERY_PAGE"` is an equivalent valid value for `repeat_headings`
+, _cf._ [documentation on `TableHeadingsDisplay`](https://py-pdf.github.io/fpdf2/fpdf/enums.html#fpdf.enums.TableHeadingsDisplay).
 
 ## Style table headings
 
@@ -207,6 +244,21 @@ The cell color is set following those settings, ordered by priority:
 4. The table setting `cell_fill_color`, if `cell_fill_mode` indicates to fill a cell
 5. The document `.fill_color` set before rendering the table
 
+_New in [:octicons-tag-24: 2.7.9](https://github.com/py-pdf/fpdf2/blob/master/CHANGELOG.md)_
+
+Finally, it is possible to define your own cell-filling logic:
+
+```python
+class EvenOddCellFillMode():
+    @staticmethod
+    def should_fill_cell(i, j):
+        return i % 2 and j % 2
+
+...
+with pdf.table(cell_fill_color=lightblue, cell_fill_mode=EvenOddCellFillMode()) as table:
+    ...
+```
+
 
 ## Set borders layout
 
@@ -244,6 +296,68 @@ Result:
 
 All the possible layout values are described
 there: [`TableBordersLayout`](https://py-pdf.github.io/fpdf2/fpdf/enums.html#fpdf.enums.TableBordersLayout).
+
+## Set cell borders
+
+_New in [:octicons-tag-24: 2.8.2](https://github.com/py-pdf/fpdf2/blob/master/CHANGELOG.md)_
+
+```python
+from fpdf import FPDF
+
+pdf = FPDF()
+pdf.add_page()
+pdf.set_font("Times", size=16)
+with pdf.table() as table:
+    for data_row in TABLE_DATA:
+        row = table.row()
+        for datum in data_row:
+            row.cell(datum, border="LEFT")
+pdf.output('table.pdf')
+```
+
+Result:
+
+![](table_with_cell_border_left.jpg)
+
+```python
+from fpdf import FPDF
+
+pdf = FPDF()
+pdf.add_page()
+pdf.set_font("Times", size=16)
+with pdf.table() as table:
+    for data_row in TABLE_DATA:
+        row = table.row()
+        for datum in data_row:
+            row.cell(datum, border="TOP")
+pdf.output('table.pdf')
+```
+
+Result:
+
+![](table_with_cell_border_top.jpg)
+
+```python
+from fpdf import FPDF
+from fpdf.enums import CellBordersLayout
+
+pdf = FPDF()
+pdf.add_page()
+pdf.set_font("Times", size=16)
+with pdf.table() as table:
+    for data_row in TABLE_DATA:
+        row = table.row()
+        for datum in data_row:
+            row.cell(datum, border=CellBordersLayout.TOP | CellBordersLayout.LEFT)
+pdf.output('table.pdf')
+```
+
+Result:
+
+![](table_with_cell_border_left_top.jpg)
+
+All the possible borders values are described there: [`CellBordersLayout`](https://py-pdf.github.io/fpdf2/fpdf/enums.html#fpdf.enums.CellBordersLayout).
+
 
 ## Insert images
 
@@ -306,7 +420,7 @@ with pdf.table() as table:
             row.cell(datum)
 ```
 
-Can be shortened to the followng code,
+Can be shortened to the following code,
 by passing lists of strings as the `cells` optional argument of `.row()`:
 
 ```python
@@ -336,9 +450,9 @@ Result:
 
 ![](table_with_gutter.jpg)
 
-## Column span
+## Column span and row span
 
-Cells spanning multiple columns can be defined by passing a `colspan` argument to `.cell()`.
+Cells spanning multiple columns or rows can be defined by passing a `colspan` or `rowspan` argument to `.cell()`.
 Only the cells with data in them need to be defined. This means that the number of cells on each row can be different.
 
 ```python
@@ -366,6 +480,73 @@ result:
 
 ![](image-colspan.png)
 
+
+
+```python
+    ...
+with pdf.table(text_align="CENTER") as table:
+    row = table.row()
+    row.cell("A1", colspan=2, rowspan=3)
+    row.cell("C1", colspan=2)
+    
+    row = table.row()
+    row.cell("C2", colspan=2, rowspan=2)
+    
+    row = table.row()
+    # all columns of this row are spanned by previous rows
+    
+    row = table.row()
+    row.cell("A4", colspan=4)
+    
+    row = table.row()
+    row.cell("A5", colspan=2)
+    row.cell("C5")
+    row.cell("D5")
+    
+    row = table.row()
+    row.cell("A6")
+    row.cell("B6", colspan=2, rowspan=2)
+    row.cell("D6", rowspan=2)
+    
+    row = table.row()
+    row.cell("A7")
+...
+```
+
+result:
+
+![](image-rowspan.png)
+
+Alternatively, the spans can be defined using the placeholder elements `TableSpan.COL` and `TableSpan.ROW`.
+These elements merge the current cell with the previous column or row respectively.
+
+For example, the previous example table can be defined as follows:
+
+```python
+    ...
+TABLE_DATA = [
+    ["A",           "B",            "C",            "D"],
+    ["A1",          TableSpan.COL,  "C1",           TableSpan.COL],
+    [TableSpan.ROW, TableSpan.ROW,  "C2",           TableSpan.COL],
+    [TableSpan.ROW, TableSpan.ROW,  TableSpan.ROW,  TableSpan.ROW],
+    ["A4",          TableSpan.COL,  TableSpan.COL,  TableSpan.COL],
+    ["A5",          TableSpan.COL,  "C5",           "D5"],
+    ["A6",          "B6",           TableSpan.COL,  "D6"],
+    ["A7",          TableSpan.ROW,  TableSpan.ROW,  TableSpan.ROW],
+]
+
+with pdf.table(TABLE_DATA, text_align="CENTER"):
+    pass
+...
+```
+
+result:
+
+![](image-rowspan.png)
+
+
+
+
 ## Table with multiple heading rows
 
 The number of heading rows is defined by passing the `num_heading_rows` argument to `Table()`. The default value is `1`. To guarantee backwards compatibility with the `first_row_as_headings` argument, the following applies:
@@ -380,9 +561,11 @@ Result:
 
 ![](table_with_multiple_headings.png)
 
-## Table from pandas DataFrame
+## Table from pandas DataFrame or spreadsheet files
+We have dedicated pages about those topics:
 
-_cf._ [Maths documentation page](Maths.md#using-pandas)
+* [Maths documentation page](Maths.md#using-pandas)
+* [Rendering spreadsheets as PDF tables](RenderingSpreadsheetsAsPDFTables.md)
 
 ## Using write_html
 

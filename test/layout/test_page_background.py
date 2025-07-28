@@ -92,11 +92,11 @@ def test_page_background(tmp_path):
     Test creating a PDF with multiple pages using all pfsible inputs to set a page background,
     drawing a rectangle and writing text on every page, testing if any other color is overwritten,
     writing a multi-line text to test if the background is retained on an automatic page break,
-    then setting a fill color, testing if the background color gets overriden and vice versa
+    then setting a fill color, testing if the background color gets overridden and vice versa
     by printing another two pages with a background color and image
     """
     pdf = FPDF()
-    pdf.set_font("Helvetica", "B", 30)
+    pdf.set_font("Helvetica", style="B", size=30)
     add_pages_with_rgb_tuple_background(pdf)
     _add_pages_with_image_background(pdf)
     add_page_with_DeviceRGB_background(pdf)

@@ -5,12 +5,15 @@ The contents of this module are internal to fpdf2, and not part of the public AP
 They may change at any time without prior warning or any deprecation period,
 in non-backward-compatible ways.
 """
+
 import logging, math, re, warnings
 from numbers import Number
 from typing import NamedTuple
 
 from fontTools.svgLib.path import parse_path
 from fontTools.pens.basePen import BasePen
+
+from .enums import PathPaintRule
 
 try:
     from defusedxml.ElementTree import fromstring as parse_xml_str
@@ -169,6 +172,15 @@ def xmlns_lookup(space, *names):
     return result
 
 
+@force_nodocument
+def without_ns(qualified_tag):
+    """Remove the xmlns namespace from a qualified XML tag name"""
+    i = qualified_tag.index("}")
+    if i >= 0:
+        return qualified_tag[i + 1 :]
+    return qualified_tag
+
+
 shape_tags = xmlns_lookup(
     "svg", "rect", "circle", "ellipse", "line", "polyline", "polygon"
 )
@@ -289,38 +301,19 @@ svg_attr_map = {
 
 
 @force_nodocument
-def parse_style(svg_element):
-    """Parse `style="..."` making it's key-value pairs element's attributes"""
-    try:
-        style = svg_element.attrib["style"]
-    except KeyError:
-        pass
-    else:
-        for element in style.split(";"):
-            if not element:
-                continue
-
-            pair = element.split(":")
-            if len(pair) == 2 and pair[0] and pair[1]:
-                attr, value = pair
-
-                svg_element.attrib[attr.strip()] = value.strip()
-
-
-@force_nodocument
 def apply_styles(stylable, svg_element):
     """Apply the known styles from `svg_element` to the pdf path/group `stylable`."""
-    parse_style(svg_element)
+    style = html.parse_css_style(svg_element.attrib.get("style", ""))
 
     stylable.style.auto_close = False
 
     for attr_name, converter in svg_attr_map.items():
-        value = svg_element.attrib.get(attr_name)
+        value = style.get(attr_name, svg_element.attrib.get(attr_name))
         if value:
             setattr(stylable.style, *converter(value))
 
     # handle this separately for now
-    opacity = svg_element.attrib.get("opacity")
+    opacity = style.get("opacity", svg_element.attrib.get("opacity"))
     if opacity:
         opacity = float(opacity)
         stylable.style.fill_opacity = opacity
@@ -871,7 +864,7 @@ class SVGObject:
             else:
                 LOGGER.warning(
                     "Ignoring unsupported SVG tag: <%s> (contributions are welcome to add support for it)",
-                    child.tag,
+                    without_ns(child.tag),
                 )
 
     # this assumes xrefs only reference already-defined ids.
@@ -924,19 +917,19 @@ class SVGObject:
             if child.tag in xmlns_lookup("svg", "defs"):
                 self.handle_defs(child)
             elif child.tag in xmlns_lookup("svg", "g"):
-                pdf_group.add_item(self.build_group(child))
+                pdf_group.add_item(self.build_group(child), False)
             elif child.tag in xmlns_lookup("svg", "path"):
-                pdf_group.add_item(self.build_path(child))
+                pdf_group.add_item(self.build_path(child), False)
             elif child.tag in shape_tags:
-                pdf_group.add_item(self.build_shape(child))
+                pdf_group.add_item(self.build_shape(child), False)
             elif child.tag in xmlns_lookup("svg", "use"):
-                pdf_group.add_item(self.build_xref(child))
+                pdf_group.add_item(self.build_xref(child), False)
             elif child.tag in xmlns_lookup("svg", "image"):
-                pdf_group.add_item(self.build_image(child))
+                pdf_group.add_item(self.build_image(child), False)
             else:
                 LOGGER.warning(
                     "Ignoring unsupported SVG tag: <%s> (contributions are welcome to add support for it)",
-                    child.tag,
+                    without_ns(child.tag),
                 )
 
         self.update_xref(group.attrib.get("id"), pdf_group)
@@ -958,16 +951,31 @@ class SVGObject:
     @force_nodocument
     def build_shape(self, shape):
         """Convert an SVG shape tag into a PDF path object. Necessary to make xref (because ShapeBuilder doesn't have access to this object.)"""
-        shape_path = getattr(ShapeBuilder, shape_tags[shape.tag])(shape)
+        shape_builder = getattr(ShapeBuilder, shape_tags[shape.tag])
+        shape_path = shape_builder(shape)
         self.apply_clipping_path(shape_path, shape)
         self.update_xref(shape.attrib.get("id"), shape_path)
         return shape_path
 
     @force_nodocument
     def build_clipping_path(self, shape, clip_id):
-        clipping_path_shape = getattr(ShapeBuilder, shape_tags[shape.tag])(shape, True)
+        if shape.tag in shape_tags:
+            shape_builder = getattr(ShapeBuilder, shape_tags[shape.tag])
+            clipping_path_shape = shape_builder(shape, True)
+        elif shape.tag in xmlns_lookup("svg", "path"):
+            clipping_path_shape = PaintedPath()
+            apply_styles(clipping_path_shape, shape)
+            clipping_path_shape.paint_rule = PathPaintRule.DONT_PAINT
+            svg_path = shape.attrib.get("d")
+            if svg_path is not None:
+                svg_path_converter(clipping_path_shape, svg_path)
+        else:
+            LOGGER.warning(
+                "Ignoring unsupported <clipPath> child tag: <%s> (contributions are welcome to add support for it)",
+                without_ns(shape.tag),
+            )
+            return
         self.update_xref(clip_id, clipping_path_shape)
-        return clipping_path_shape
 
     @force_nodocument
     def apply_clipping_path(self, stylable, svg_element):

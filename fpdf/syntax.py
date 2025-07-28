@@ -59,6 +59,7 @@ The contents of this module are internal to fpdf2, and not part of the public AP
 They may change at any time without prior warning or any deprecation period,
 in non-backward-compatible ways.
 """
+
 import re, zlib
 from abc import ABC
 from binascii import hexlify
@@ -136,12 +137,9 @@ class Name(str):
 
 
 class PDFObject:
-    """
-    Main features of this class:
-    * delay ID assignement
-    * implement serializing
-    """
-
+    # Main features of this class:
+    # * delay ID assignment
+    # * implement serializing
     # Note: several child classes use __slots__ to save up some memory
 
     def __init__(self):
@@ -314,7 +312,7 @@ class PDFDate:
         if self.with_tz:
             assert self.date.tzinfo
             if self.date.tzinfo == timezone.utc:
-                out_str = f"D:{self.date:%Y%m%d%H%M%SZ%H'%M'}"
+                out_str = f"D:{self.date:%Y%m%d%H%M%SZ}"
             else:
                 out_str = f"D:{self.date:%Y%m%d%H%M%S%z}"
                 out_str = out_str[:-2] + "'" + out_str[-2:] + "'"
@@ -330,14 +328,16 @@ class PDFArray(list):
     def serialize(self, _security_handler=None, _obj_id=None):
         if all(isinstance(elem, str) for elem in self):
             serialized_elems = " ".join(self)
-        elif all(isinstance(elem, int) for elem in self):
+        elif all(isinstance(elem, (int, float)) for elem in self):
             serialized_elems = " ".join(str(elem) for elem in self)
         else:
             serialized_elems = "\n".join(
-                elem.ref
-                if isinstance(elem, PDFObject)
-                else elem.serialize(
-                    _security_handler=_security_handler, _obj_id=_obj_id
+                (
+                    elem.ref
+                    if isinstance(elem, PDFObject)
+                    else elem.serialize(
+                        _security_handler=_security_handler, _obj_id=_obj_id
+                    )
                 )
                 for elem in self
             )
@@ -377,3 +377,14 @@ class DestinationXYZ(Destination):
         top = round(self.top, 2) if isinstance(self.top, float) else self.top
         assert self.page_ref
         return f"[{self.page_ref} /XYZ {left} {top} {self.zoom}]"
+
+    def replace(self, page=None, top=None, left=None, zoom=None):
+        assert (
+            not self.page_ref
+        ), "DestinationXYZ should not be copied after serialization"
+        return DestinationXYZ(
+            page=self.page_number if page is None else page,
+            top=self.top if top is None else top,
+            left=self.left if left is None else left,
+            zoom=self.zoom if zoom is None else zoom,
+        )

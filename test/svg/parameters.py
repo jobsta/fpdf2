@@ -775,6 +775,14 @@ test_svg_sources = (
         svgfile("use-image-def.svg"),
         id="Use xlink:href to insert an <image> from <defs>",
     ),
+    pytest.param(
+        svgfile("issue-1076.svg"),
+        id="<clipPath> containing a <path>",
+    ),
+    pytest.param(
+        svgfile("path_clippingpath.svg"),
+        id="<clipPath> containing a <path> used in a group with color - issue #1147",
+    ),
 )
 
 svg_path_edge_cases = (

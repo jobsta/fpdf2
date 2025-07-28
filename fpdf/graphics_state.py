@@ -6,6 +6,8 @@ They may change at any time without prior warning or any deprecation period,
 in non-backward-compatible ways.
 """
 
+from copy import copy
+
 from .drawing import DeviceGray
 from .enums import CharVPos, TextEmphasis, TextMode
 from .fonts import FontFace
@@ -41,6 +43,7 @@ class GraphicsStateMixin:
                 font_family="",
                 font_size_pt=0,
                 current_font={},
+                current_font_is_set_on_page=False,
                 dash_pattern=dict(dash=0, gap=0, phase=0),
                 line_width=0,
                 text_mode=TextMode.FILL,
@@ -54,21 +57,33 @@ class GraphicsStateMixin:
                 nom_lift=0.2,
                 denom_lift=0.0,
                 text_shaping=None,
-            ),
+            )
         ]
         super().__init__(*args, **kwargs)
 
     def _push_local_stack(self, new=None):
-        if new:
-            self.__statestack.append(new)
-        else:
-            self.__statestack.append(self.__statestack[-1].copy())
+        "Push a graphics state on the stack"
+        if not new:
+            new = self._get_current_graphics_state()
+        self.__statestack.append(new)
+        return new
 
     def _pop_local_stack(self):
+        "Pop the last graphics state on the stack"
         return self.__statestack.pop()
 
     def _get_current_graphics_state(self):
-        return self.__statestack[-1].copy()
+        "Retrieve the current graphics state"
+        # "current_font" must be shallow copied
+        # "text_shaping" must be deep copied (different fragments may have different languages/direction)
+        # Doing a whole copy and then creating a copy of text_shaping to achieve this result
+        gs = copy(self.__statestack[-1])
+        gs["text_shaping"] = copy(gs["text_shaping"])
+        return gs
+
+    def _is_current_graphics_state_nested(self):
+        "Indicate if the stack contains items (else it is empty)"
+        return len(self.__statestack) > 1
 
     @property
     def draw_color(self):
@@ -165,6 +180,14 @@ class GraphicsStateMixin:
     @current_font.setter
     def current_font(self, v):
         self.__statestack[-1]["current_font"] = v
+
+    @property
+    def current_font_is_set_on_page(self):
+        return self.__statestack[-1]["current_font_is_set_on_page"]
+
+    @current_font_is_set_on_page.setter
+    def current_font_is_set_on_page(self, v):
+        self.__statestack[-1]["current_font_is_set_on_page"] = v
 
     @property
     def dash_pattern(self):
@@ -351,10 +374,18 @@ class GraphicsStateMixin:
             family=self.font_family,
             emphasis=TextEmphasis.coerce(self.font_style),
             size_pt=self.font_size_pt,
-            color=self.text_color
-            if self.text_color != self.DEFAULT_TEXT_COLOR
-            else None,
-            fill_color=self.fill_color
-            if self.fill_color != self.DEFAULT_FILL_COLOR
-            else None,
+            color=(
+                self.text_color if self.text_color != self.DEFAULT_TEXT_COLOR else None
+            ),
+            fill_color=(
+                self.fill_color if self.fill_color != self.DEFAULT_FILL_COLOR else None
+            ),
         )
+
+
+__pdoc__ = {
+    "GraphicsStateMixin._push_local_stack": True,
+    "GraphicsStateMixin._pop_local_stack": True,
+    "GraphicsStateMixin._get_current_graphics_state": True,
+    "GraphicsStateMixin._is_current_graphics_state_nested": True,
+}

@@ -8,6 +8,7 @@ in non-backward-compatible ways.
 
 import copy, decimal, math, re
 from collections import OrderedDict
+
 from collections.abc import Sequence
 from contextlib import contextmanager
 from typing import Optional, NamedTuple, Union
@@ -214,8 +215,13 @@ class DeviceRGB(
 
     @property
     def colors(self):
-        """The color components as a tuple in order `(r, g, b)` with alpha omitted."""
+        "The color components as a tuple in order `(r, g, b)` with alpha omitted, in range 0-1."
         return self[:-1]
+
+    @property
+    def colors255(self):
+        "The color components as a tuple in order `(r, g, b)` with alpha omitted, in range 0-255."
+        return tuple(255 * v for v in self.colors)
 
     def serialize(self) -> str:
         return " ".join(number_to_str(val) for val in self.colors) + f" {self.OPERATOR}"
@@ -257,11 +263,16 @@ class DeviceGray(
 
     @property
     def colors(self):
-        """The color components as a tuple in order (g,) with alpha omitted."""
-        return self[:-1]
+        "The color components as a tuple in order (r, g, b) with alpha omitted, in range 0-1."
+        return self.g, self.g, self.g
+
+    @property
+    def colors255(self):
+        "The color components as a tuple in order `(r, g, b)` with alpha omitted, in range 0-255."
+        return tuple(255 * v for v in self.colors)
 
     def serialize(self) -> str:
-        return " ".join(number_to_str(val) for val in self.colors) + f" {self.OPERATOR}"
+        return f"{number_to_str(self.g)} {self.OPERATOR}"
 
 
 __pdoc__["DeviceGray.OPERATOR"] = False
@@ -312,8 +323,7 @@ class DeviceCMYK(
 
     @property
     def colors(self):
-        """The color components as a tuple in order (c, m, y, k) with alpha omitted."""
-
+        "The color components as a tuple in order (c, m, y, k) with alpha omitted, in range 0-1."
         return self[:-1]
 
     def serialize(self) -> str:
@@ -322,9 +332,9 @@ class DeviceCMYK(
 
 __pdoc__["DeviceCMYK.OPERATOR"] = False
 __pdoc__["DeviceCMYK.c"] = "The cyan color component. Must be in the interval [0, 1]."
-__pdoc__[
-    "DeviceCMYK.m"
-] = "The magenta color component. Must be in the interval [0, 1]."
+__pdoc__["DeviceCMYK.m"] = (
+    "The magenta color component. Must be in the interval [0, 1]."
+)
 __pdoc__["DeviceCMYK.y"] = "The yellow color component. Must be in the interval [0, 1]."
 __pdoc__["DeviceCMYK.k"] = "The black color component. Must be in the interval [0, 1]."
 __pdoc__[
@@ -355,7 +365,10 @@ def rgb8(r, g, b, a=None):
     Raises:
         ValueError: if any components are not in their valid interval.
     """
-    if a is not None:
+    if a is None:
+        if r == g == b:
+            return DeviceGray(r / 255.0)
+    else:
         a /= 255.0
 
     return DeviceRGB(r / 255.0, g / 255.0, b / 255.0, a)
@@ -384,9 +397,11 @@ def gray8(g, a=None):
 
 
 def convert_to_device_color(r, g=-1, b=-1):
-    if isinstance(r, (DeviceGray, DeviceRGB)):
+    if isinstance(r, (DeviceCMYK, DeviceGray, DeviceRGB)):
         # Note: in this case, r is also a Sequence
         return r
+    if isinstance(r, str) and r.startswith("#"):
+        return color_from_hex_string(r)
     if isinstance(r, Sequence):
         r, g, b = r
     if (r, g, b) == (0, 0, 0) or g == -1:
@@ -423,9 +438,10 @@ def color_from_hex_string(hexstr):
     Parse an RGB color from a css-style 8-bit hexadecimal color string.
 
     Args:
-        hexstr (str): of the form `#RGB`, `#RGBA`, `#RRGGBB`, or `#RRGGBBAA`. Must
-            include the leading octothorp. Forms omitting the alpha field are
-            interpreted as not specifying the opacity, so it will not be explicitly set.
+        hexstr (str): of the form `#RGB`, `#RGBA`, `#RRGGBB`, or `#RRGGBBAA` (case
+            insensitive). Must include the leading octothorp. Forms omitting the alpha
+            field are interpreted as not specifying the opacity, so it will not be
+            explicitly set.
 
             An alpha value of `00` is fully transparent and `FF` is fully opaque.
 
@@ -1434,9 +1450,7 @@ class GraphicsStyle:
                 result[key] = value
 
         # There is additional logic in GraphicsContext to ensure that this will work
-        if (self.stroke_dash_pattern is not self.INHERIT) and (
-            self.stroke_dash_pattern is not None
-        ):
+        if self.stroke_dash_pattern and self.stroke_dash_pattern is not self.INHERIT:
             result[PDFStyleKeys.STROKE_DASH_PATTERN.value] = [
                 self.stroke_dash_pattern,
                 self.stroke_dash_phase,
@@ -4034,11 +4048,10 @@ class GraphicsContext:
                     val = getattr(merged_style, attr)
                     if val is not merged_style.INHERIT:
                         if getattr(self.style, attr) is merged_style.INHERIT:
-                            inh = " (inherited)"
+                            inherited = " (inherited)"
                         else:
-                            inh = ""
-
-                        styles_dbg.append(f"{attr}: {val}{inh}")
+                            inherited = ""
+                        styles_dbg.append(f"{attr}: {val}{inherited}")
 
                 if styles_dbg:
                     debug_stream.write(" {\n")
