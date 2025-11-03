@@ -9,6 +9,9 @@ in non-backward-compatible ways.
 import gc
 import os
 import warnings
+
+# nosemgrep: python.lang.compatibility.python37.python37-compatibility-importlib2 (min Python is 3.9)
+from importlib import resources
 from numbers import Number
 from tracemalloc import get_traced_memory, is_tracing
 from typing import Iterable, NamedTuple, Tuple, Union
@@ -102,8 +105,8 @@ def convert_unit(
 
      Args:
         to_convert (float, int, Iterable): The number / list of numbers, or points, to convert
-        old_unit (str, float, int): A unit accepted by fpdf.FPDF or a number
-        new_unit (str, float, int): A unit accepted by fpdf.FPDF or a number
+        old_unit (str, float, int): A unit accepted by `fpdf.fpdf.FPDF` or a number
+        new_unit (str, float, int): A unit accepted by `fpdf.fpdf.FPDF` or a number
     Returns:
         (float, tuple): to_convert converted from old_unit to new_unit or a tuple of the same
     """
@@ -147,6 +150,99 @@ def int_to_letters(n: int) -> str:
     if n > 25:
         return int_to_letters(int((n / 26) - 1)) + int_to_letters(n % 26)
     return chr(n + ord("A"))
+
+
+def builtin_srgb2014_bytes() -> bytes:
+    pkg = "fpdf.data.color_profiles"
+    return (resources.files(pkg) / "sRGB2014.icc").read_bytes()
+
+
+def format_number(x: float, digits: int = 8) -> str:
+    # snap tiny values to zero to avoid "-0" and scientific notation
+    if abs(x) < 1e-12:
+        x = 0.0
+    s = f"{x:.{digits}f}"
+    if "." in s:
+        s = s.rstrip("0").rstrip(".")
+    if s == "-0":
+        s = "0"
+    if s.startswith("."):
+        s = "0" + s
+    if s.startswith("-."):
+        s = s.replace("-.", "-0.", 1)
+    return s
+
+
+def get_parsed_unicode_range(unicode_range):
+    """
+    Parse unicode_range parameter into a set of codepoints.
+
+    Supports CSS-style formats:
+
+    - String with comma-separated ranges: "U+1F600-1F64F, U+2600-26FF, U+2615"
+    - List of strings: ["U+1F600-1F64F", "U+2600", "U+26FF"]
+    - List of tuples: [(0x1F600, 0x1F64F), (0x2600, 0x26FF)]
+    - List of integers: [0x1F600, 0x2600, 128512]
+    - Mixed formats: [(0x1F600, 0x1F64F), "U+2600", 128512]
+
+    Returns a set of integer codepoints.
+    """
+    if unicode_range is not None and len(unicode_range) == 0:
+        raise ValueError("unicode_range cannot be empty")
+
+    codepoints = set()
+
+    if isinstance(unicode_range, str):
+        unicode_range = [item.strip() for item in unicode_range.split(",")]
+
+    for item in unicode_range:
+        if isinstance(item, tuple):
+            if len(item) != 2:
+                raise ValueError(f"Tuple must have exactly 2 elements: {item}")
+            start, end = item
+
+            if isinstance(start, str):
+                start = int(start.replace("U+", "").replace("u+", ""), 16)
+            if isinstance(end, str):
+                end = int(end.replace("U+", "").replace("u+", ""), 16)
+
+            if start > end:
+                raise ValueError(f"Invalid range: start ({start}) > end ({end})")
+
+            codepoints.update(range(start, end + 1))
+
+        elif isinstance(item, str):
+            item_stripped = item.strip().replace("u+", "U+")
+
+            if "-" in item_stripped and not item_stripped.startswith("-"):
+                parts = item_stripped.split("-")
+                if len(parts) != 2:
+                    raise ValueError(f"Invalid range format: {item_stripped}")
+
+                start = int(parts[0].replace("U+", ""), 16)
+                end = int(parts[1].replace("U+", ""), 16)
+
+                if start > end:
+                    raise ValueError(
+                        f"Invalid range: start ({hex(start)}) > end ({hex(end)})"
+                    )
+
+                codepoints.update(range(start, end + 1))
+            else:
+                codepoint = int(item_stripped.replace("U+", ""), 16)
+                codepoints.add(codepoint)
+
+        elif isinstance(item, int):
+            if item < 0:
+                raise ValueError(f"Invalid codepoint: {item} (must be non-negative)")
+            codepoints.add(item)
+
+        else:
+            raise ValueError(
+                f"Unsupported unicode_range item type: {type(item).__name__}"
+            )
+
+    return codepoints
 
 
 ################################################################################

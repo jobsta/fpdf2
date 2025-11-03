@@ -1,3 +1,7 @@
+"""
+Usage documentation at: <https://py-pdf.github.io/fpdf2/TextRegion.html>
+"""
+
 import math
 from typing import NamedTuple, Sequence, List, NewType
 
@@ -527,6 +531,7 @@ class TextRegion(ParagraphCollectorMixin):
                     and tl_wrapper.first_line
                     and not cur_bullet
                     and cur_paragraph.top_margin
+                    # Do not render margin on top of page:
                     and self.pdf.y > self.pdf.t_margin
                 ):
                     self.pdf.y += cur_paragraph.top_margin
@@ -704,13 +709,10 @@ class TextColumns(TextRegion, TextColumnarMixin):
             if balancing and c == (self._ncols - 1):
                 # Give the last column more space in case the balancing is out of whack.
                 bottom = self.pdf.h - self.pdf.b_margin
-            last_line_height = self._render_column_lines(text_lines, top, bottom)
-            if balancing:
-                new_y = self.pdf.y + last_line_height
-                if new_y > next_y:
-                    next_y = new_y
-        if balancing:
-            self.pdf.y = next_y
+            self._render_column_lines(text_lines, top, bottom)
+            if self.pdf.y > next_y:
+                next_y = self.pdf.y
+        self.pdf.y = next_y
 
     def render(self):
         if not self._paragraphs:

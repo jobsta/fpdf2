@@ -12,6 +12,7 @@ import logging
 import os
 import pathlib
 import shutil
+import sys
 import tracemalloc
 import warnings
 
@@ -51,6 +52,25 @@ LOREM_IPSUM = (
     "cupidatat do Ut aliqua irure sunt sunt proident sit aliqua in "
     "dolore Ut in sint sunt exercitation aliquip elit velit dolor nisi "
 )
+
+EMOJI_TEST_TEXT = (
+    "Remember the days when we had to rely on simple text-based emoticons like :-) or :D to show our feelings online? Those little "
+    "symbols paved the way for a whole universe of expressive visuals 🤯. As technology advanced 🚀 and mobile devices became more "
+    "powerful 📱, the emoticon evolved into the now-iconic emoji 🚦😍! Suddenly, instead of typing <3 for love, we could send an "
+    "actual heart ❤️—and a million other icons, too. From smiling faces 😊 to dancing humans 💃, from tiny pizzas 🍕 to entire flags "
+    "🌍, emojis quickly took over every conversation! Now, we can convey jokes 🤪, excitement 🤩, or even complicated feelings 🤔 with "
+    "just a tap or two. Looking back, who knew those humble :-P and ;-) would evolve into the expressive rainbow of emojis 🌈 that color "
+    "our digital world today?"
+)
+
+
+def assert_same_file(file1, file2):
+    """
+    Assert that two files are the same, by comparing their absolute paths.
+    """
+    assert os.path.normcase(os.path.abspath(file1)) == os.path.normcase(
+        os.path.abspath(file2)
+    )
 
 
 def assert_pdf_equal(
@@ -99,6 +119,12 @@ def assert_pdf_equal(
         )
         actual_pdf.output(expected.open("wb"), linearize=linearize)
         return
+    # Force ignore_id_changes on Python 3.14
+    # CPython replaced zlib by zlib-ng on the Windows build
+    # and the compressed data is not 100% identical anymore.
+    # https://github.com/python/cpython/pull/131438
+    if sys.version_info[:2] == (3, 14) and QPDF_AVAILABLE:
+        ignore_id_changes = True
     if isinstance(expected, pathlib.Path):
         expected_pdf_path = expected
     else:

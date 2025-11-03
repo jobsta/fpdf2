@@ -22,7 +22,7 @@ Go try it **now** online in a Jupyter notebook: [![Open In Colab](https://colab.
 ## Main features ##
 
 * Easy to use, with a user-friendly [API](https://py-pdf.github.io/fpdf2/fpdf/), and easy to extend
-* Python 3.8+ support
+* Python 3.10+ support
 * [Unicode](Unicode.md) (UTF-8) TrueType font subset embedding (Central European, Cyrillic, Greek, Baltic, Thai, Chinese, Japanese, Korean, Hindi and almost any other language in the world)
 * Internal / external [links](Links.md)
 * Embedding images, including transparency and alpha channel, using [Pillow (Python Imaging Library)](https://pillow.readthedocs.io/en/stable/)
@@ -68,7 +68,7 @@ Go try it **now** online in a Jupyter notebook: [![Open In Colab](https://colab.
 * [Türkçe](Tutorial-tr.md)
 * [Indonesian](Tutorial-id.md)
 * [Slovenščina](Tutorial-sl.md)
-
+* [Українська](Tutorial-ua.md)
 
 ## Installation ##
 
@@ -85,6 +85,7 @@ pip install git+https://github.com/py-pdf/fpdf2.git@master
 
 **Development**: check the [dedicated documentation page](Development.md).
 
+<!-- Not documenting pypi-attributions for now, as recommended by @woodruffw: https://github.com/trailofbits/pypi-attestations/issues/85#issuecomment-2779481313
 ### Verifying provenance
 [`pypi-attestations`](https://pypi.org/project/pypi-attestations/) can be used to check the provenance of a `fpdf2-2.X.Y.tar.gz` or `fpdf2-2.X.Y-py2.py3-none-any.whl` package (_cf._ [PyPI now supports digital attestations](https://blog.pypi.org/posts/2024-11-14-pypi-now-supports-digital-attestations/)).
 
@@ -99,6 +100,7 @@ OK: fpdf2-2.8.2-py2.py3-none-any.whl
 ```
 
 The file URL can be retrieved from the [pypi.org/simple/fpdf2 page](https://pypi.org/simple/fpdf2/).
+-->
 
 ### Displaying deprecation warnings
 `DeprecationWarning`s are not displayed by Python by default.

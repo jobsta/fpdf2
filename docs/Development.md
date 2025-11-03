@@ -2,8 +2,6 @@
 
 This page has summary information about developing the fpdf2 library.
 
-[TOC]
-
 ## Repository structure
 
 * `.github/` - GitHub Actions configuration
@@ -22,6 +20,48 @@ This page has summary information about developing the fpdf2 library.
 * `tox.ini` - configuration for [Tox](https://tox.readthedocs.io/en/latest/)
 * `.banditrc.yml` - configuration for [bandit](https://pypi.org/project/bandit/)
 * `.pylintrc` - configuration for [Pylint](http://pylint.pycqa.org/en/latest/)
+
+### Deprecation policy
+
+We aim to keep public behaviour stable for as long as possible, so removals go through a staged process.
+
+**Method deprecation**
+- Document the deprecation directly in the docstring using a `.. deprecated::` directive.
+- Emit a `DeprecationWarning`, while still executing a compatible code path when feasible.
+- Example (from `fpdf/fpdf.py`):
+
+  ```python
+  def set_doc_option(self, opt, value):
+      """
+      Defines a document option.
+
+      Args:
+          opt (str): name of the option to set
+          value (str): option value
+
+      .. deprecated:: 2.4.0
+          Simply set the `FPDF.core_fonts_encoding` property as a replacement.
+      """
+      warnings.warn(
+          (
+              "set_doc_option() is deprecated since v2.4.0 "
+              "and will be removed in a future release. "
+              "Simply set the `.core_fonts_encoding` property as a replacement."
+          ),
+          DeprecationWarning,
+          stacklevel=get_stack_level(),
+      )
+      if opt != "core_fonts_encoding":
+          raise FPDFException(f'Unknown document option "{opt}"')
+      self.core_fonts_encoding = value
+  ```
+
+**Parameter deprecation**
+- Step 1: Mark the parameter as deprecated in the documentation and emit a warning when it is supplied.
+- Step 2: After a few releases, add the `@deprecated_parameter()` decorator so that the argument disappears from the public signature and linters/IDEs flag its usage.
+- Step 3: Remove support for the parameter entirely, once it is safe with respect to backwards compatibility.
+
+We try to leave generous time between these steps and only delete behaviour when absolutely necessary.
 
 ## Installing fpdf2 from a local git repository
 ```
@@ -85,7 +125,7 @@ You can run a single test by executing: `pytest -k function_name`.
 Alternatively, you can use [Tox](https://tox.readthedocs.io/en/latest/).
 It is self-documented in the `tox.ini` file in the repository.
 To run tests for all versions of Python, simply run `tox`.
-If you do not want to run tests for all versions of python, run `tox -e py39`
+If you do not want to run tests for all versions of python, run `tox -e py313`
 (or your version of Python).
 
 ### Why is a test failing?
@@ -208,17 +248,36 @@ static code analysis with `pylint`, unit tests...
 _Pull Requests_ submitted must pass all those checks in order to be approved.
 Ask maintainers through comments if some errors in the pipeline seem obscure to you.
 
+### Renovate, GitHub Actions & security
+We use [Renovate](https://github.com/apps/renovate) to detect dependency updates & create PRs
+for the Python dependencies / GitHub Actions / NPM dependencies that we use.
+
+Its configuration file is [renovate.json](https://github.com/py-pdf/fpdf2/blob/master/renovate.json),
+and the full tool documentation is there: [docs.renovatebot.com](https://docs.renovatebot.com/).
+
+To debug issues with Renovate, it can be useful to invoke it locally using Docker, like this:
+
+    docker run -e LOG_LEVEL=debug docker.io/renovate/renovate:41-full --dry-run --token "$GITHUB_OAUTH_TOKEN" py-pdf/fpdf2
+
+We also use [zizmor](https://woodruffw.github.io/zizmor/) as a GitHub Action
+to perform static analysis on our pipeline definition files.
+
+In order to use `zizmor` locally:
+
+    zizmor .github/workflows/*.yml
+
 ### typos
 [typos](https://github.com/crate-ci/typos) is a handy CLI tool to detect & auto-fix [typos](https://en.wikipedia.org/wiki/Typographical_error) in source files.
 Installation is relatively straightforward ([read the docs](https://github.com/crate-ci/typos?tab=readme-ov-file#install)).
 
 This tool is invoked in the [pre-commit hooks](#pre-commit-hook) and in our CI pipeline.
+
 If it fails, you should either:
 
 * auto-fix the errors detected by invoking `typos --write-changes`
 * add an exclusion rule to `.typos.toml`
 
-### Release checklist
+## Release checklist
 1. complete `CHANGELOG.md` and add the version & date of the new release
 2. bump `FPDF_VERSION` in `fpdf/fpdf.py`.
 Also (optional, once every year), update `contributors/contributors-map-small.png` based on <https://py-pdf.github.io/fpdf2/contributors.html>

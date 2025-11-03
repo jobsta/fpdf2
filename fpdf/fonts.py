@@ -5,9 +5,12 @@ Includes the definition of the character widths of all PDF standard fonts.
 The contents of this module are internal to fpdf2, and not part of the public API.
 They may change at any time without prior warning or any deprecation period,
 in non-backward-compatible ways.
+
+Usage documentation at: <https://py-pdf.github.io/fpdf2/Unicode.html>
 """
 
 import re, warnings
+from copy import deepcopy
 import logging
 
 from bisect import bisect_left
@@ -18,6 +21,7 @@ from typing import Optional, Tuple, Union
 
 from fontTools import ttLib
 from fontTools.pens.ttGlyphPen import TTGlyphPen
+from fontTools.varLib import instancer
 
 try:
     import uharfbuzz as hb
@@ -34,10 +38,11 @@ except ImportError:
     hb = None
 
 from .deprecation import get_stack_level
-from .drawing import convert_to_device_color, DeviceGray, DeviceRGB
+from .drawing_primitives import convert_to_device_color, DeviceGray, DeviceRGB
 from .enums import FontDescriptorFlags, TextEmphasis, Align
 from .errors import FPDFException, FPDFMissingGlyphException
 from .syntax import Name, PDFObject
+from .font_type_3 import get_color_font_object
 from .util import escape_parens
 
 LOGGER = logging.getLogger(__name__)
@@ -221,8 +226,8 @@ class CoreFont:
         "emphasis",
     )
 
-    def __init__(self, fpdf, fontkey, style):
-        self.i = len(fpdf.fonts) + 1
+    def __init__(self, i, fontkey, style):
+        self.i = i
         self.type = "core"
         self.name = CORE_FONTS[fontkey]
         self.sp = 250  # strikethrough horizontal position
@@ -252,7 +257,7 @@ class TTFFont:
         "name",
         "desc",
         "glyph_ids",
-        "hbfont",
+        "_hbfont",
         "sp",
         "ss",
         "up",
@@ -266,21 +271,48 @@ class TTFFont:
         "cmap",
         "ttfont",
         "missing_glyphs",
+        "biggest_size_pt",
+        "color_font",
+        "unicode_range",
+        "palette_index",
         "qm_char_code",
         "encode_error_handling",
     )
 
-    def __init__(self, fpdf, font_file_path, fontkey, style):
+    def __init__(
+        self,
+        fpdf,
+        font_file_path,
+        fontkey,
+        style,
+        unicode_range=None,
+        axes_dict=None,
+        palette_index=None,
+    ):
         self.i = len(fpdf.fonts) + 1
         self.type = "TTF"
         self.ttffile = font_file_path
+        self._hbfont = None
         self.fontkey = fontkey
+        self.biggest_size_pt = 0
 
         # recalcTimestamp=False means that it doesn't modify the "modified" timestamp in head table
         # if we leave recalcTimestamp=True the tests will break every time
         self.ttfont = ttLib.TTFont(
             self.ttffile, recalcTimestamp=False, fontNumber=0, lazy=True
         )
+
+        if axes_dict is not None:
+            # Check if variable font.
+            if "fvar" not in self.ttfont:
+                raise AttributeError(f"{self.ttffile} is not a variable font")
+
+            instancer.instantiateVariableFont(
+                self.ttfont,
+                axes_dict,
+                inplace=True,
+                static=True,
+            )
 
         self.scale = 1000 / self.ttfont["head"].unitsPerEm
 
@@ -362,6 +394,13 @@ class TTFFont:
                 "Font not supported as it does not have a unicode cmap table - cf. issue #1396"
             )
 
+        if unicode_range is not None and len(unicode_range) != 0:
+            self.cmap = {
+                codepoint: glyph_id
+                for codepoint, glyph_id in self.cmap.items()
+                if codepoint in unicode_range
+            }
+
         # saving a list of glyph ids to char to allow
         # subset by unicode (regular) and by glyph
         # (shaped with harfbuz)
@@ -391,21 +430,79 @@ class TTFFont:
         self.ss = round(os2_table.yStrikeoutSize * self.scale)
         self.emphasis = TextEmphasis.coerce(style)
         self.subset = SubsetMap(self)
+        self.palette_index = palette_index if palette_index is not None else 0
+        self.color_font = (
+            get_color_font_object(fpdf, self, self.palette_index)
+            if fpdf.render_color_fonts
+            else None
+        )
         # char code for question mark, needed when missing character is replaced with "?"
         self.qm_char_code = self.subset.pick(ord('?'))
         # defines how to handle missing glyph in font ('strict', 'ignore' or 'replace')
         self.encode_error_handling = fpdf.encode_error_handling
 
+    # pylint: disable=no-member
+    @property
+    def hbfont(self):
+        if not self._hbfont:
+            self._hbfont = HarfBuzzFont(hb.Face(hb.Blob.from_file_path(self.ttffile)))
+        return self._hbfont
+
     def __repr__(self):
         return f"TTFFont(i={self.i}, fontkey={self.fontkey})"
 
+    def __deepcopy__(self, memo):
+        """
+        The aim here is that FPDFRecorder.__init__() does NOT deepcopy all fonts attributes
+        but instead share references to immutable objects
+        between the original FPDF instance and the FPDFRecorder instances
+        to avoid performances issues as spotted in issue #1444.
+        """
+        copy = TTFFont.__new__(TTFFont)
+        # Immutable attributes:
+        copy.i = self.i
+        copy.type = "TTF"
+        copy.ttffile = self.ttffile
+        copy.fontkey = self.fontkey
+        copy.scale = self.scale
+        copy.name = self.name
+        copy.up = self.up
+        copy.ut = self.ut
+        copy.sp = self.sp
+        copy.ss = self.ss
+        copy.emphasis = self.emphasis
+        # Attributes shared, to improve FPDFRecorder performances:
+        copy.ttfont = self.ttfont
+        copy.cmap = self.cmap
+        copy.desc = self.desc
+        # Attributes deepcopied:
+        copy.cw = deepcopy(self.cw, memo)
+        copy.glyph_ids = deepcopy(self.glyph_ids, memo)
+        copy.missing_glyphs = deepcopy(self.missing_glyphs, memo)
+        copy.subset = deepcopy(self.subset, memo)
+        copy.biggest_size_pt = self.biggest_size_pt
+        copy._hbfont = self._hbfont
+        copy.color_font = self.color_font
+        copy.palette_index = self.palette_index
+        copy.qm_char_code = self.qm_char_code
+        copy.encode_error_handling = self.encode_error_handling
+        return copy
+
     def close(self):
         self.ttfont.close()
-        self.hbfont = None
+        self._hbfont = None
 
-    def get_text_width(self, text, font_size_pt, text_shaping_parms):
-        if text_shaping_parms:
-            return self.shaped_text_width(text, font_size_pt, text_shaping_parms)
+    def escape_text(self, text):
+        if self.color_font:
+            encoded = text.encode("latin-1", errors="replace")
+            return escape_parens(encoded.decode("latin-1", errors="ignore"))
+        return escape_parens(text.encode("utf-16-be").decode("latin-1"))
+
+    def get_text_width(self, text, font_size_pt, text_shaping_params):
+        if font_size_pt > self.biggest_size_pt:
+            self.biggest_size_pt = font_size_pt
+        if text_shaping_params:
+            return self.shaped_text_width(text, font_size_pt, text_shaping_params)
         printed_char_count = 0
         sum_cw = 0
         for c in text:
@@ -449,8 +546,6 @@ class TTFFont:
         """
         This method invokes Harfbuzz to perform text shaping of the input string
         """
-        if not hasattr(self, "hbfont"):
-            self.hbfont = HarfBuzzFont(hb.Face(hb.Blob.from_file_path(self.ttffile)))
         self.hbfont.ptem = font_size_pt
         buf = hb.Buffer()
         buf.cluster_level = 1
@@ -483,7 +578,7 @@ class TTFFont:
                 # ignore character with encode_error_handling == 'ignore'
             else:
                 txt_mapped += chr(char_code)
-        return f'({escape_parens(txt_mapped.encode("utf-16-be").decode("latin-1"))}) Tj'
+        return f"({self.escape_text(txt_mapped)}) Tj"
 
     def shape_text(self, text, font_size_pt, text_shaping_params):
         """
@@ -677,6 +772,9 @@ class SubsetMap:
         if unicode == 0x00:
             glyph_id = next(iter(self.font.cmap))
             return Glyph(glyph_id, (0x00,), ".notdef", 0)
+        if unicode == 0x20:
+            glyph_id = next(iter(self.font.cmap))
+            return Glyph(glyph_id, (0x20,), "space", self.font.cw[0x20])
         return None
 
     def get_all_glyph_names(self):
