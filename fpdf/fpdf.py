@@ -5078,7 +5078,7 @@ class FPDF(GraphicsStateMixin, TextRegionMixin):
         name, img, info = preload_image(self.image_cache, name, dims)
         if isinstance(info, VectorImageInfo):
             return self._vector_image(
-                name, img, info, x, y, w, h, link, title, alt_text, keep_aspect_ratio
+                name, img, info, x, y, w, h, link, title, alt_text, keep_aspect_ratio, halign, valign
             )
         return self._raster_image(
             name,
@@ -5203,6 +5203,8 @@ class FPDF(GraphicsStateMixin, TextRegionMixin):
         title=None,
         alt_text=None,
         keep_aspect_ratio=False,
+        halign=None,
+        valign=None,
     ):
         if not svg.viewbox and svg.width and svg.height:
             warnings.warn(
@@ -5242,6 +5244,31 @@ class FPDF(GraphicsStateMixin, TextRegionMixin):
                 w = h * svg_width / svg_height
             else:  # h == 0
                 h = w * svg_height / svg_width
+
+        if halign or valign:
+            # horizontal and vertical alignment of image within given width and height
+            # by keeping original image aspect ratio
+            image_width, image_height = info['w'], info['h']
+            if image_width <= w and image_height <= h:
+                image_display_width, image_display_height = image_width, image_height
+            else:
+                size_ratio = image_width / image_height
+                tmp = w / size_ratio
+                if tmp <= h:
+                    image_display_width = w
+                    image_display_height = tmp
+                else:
+                    image_display_width = h * size_ratio
+                    image_display_height = h
+            if halign == 'C':  # center
+                x += (w - image_display_width) / 2
+            elif halign == 'R':  # right
+                x += w - image_display_width
+            if valign in ('C', 'M'):  # center / middle
+                y += (h - image_display_height) / 2
+            elif valign == 'B':  # bottom
+                y += h - image_display_height
+            w, h = image_display_width, image_display_height
 
         # Flowing mode
         if y is None:
